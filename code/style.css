@@ -1,0 +1,22 @@
+img {
+    height:100px;
+    margin: 0 auto;
+    display: block;
+    
+}
+body {
+    background-color:antiquewhite
+}
+.container {
+    height:100%;
+    width:auto;
+    background-color:#183B36
+}
+
+.party {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    height: 20%;
+}
