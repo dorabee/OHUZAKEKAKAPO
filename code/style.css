@@ -1,22 +1,45 @@
-img {
-    height:100px;
-    margin: 0 auto;
-    display: block;
-    
+* {
+    box-sizing: border-box;
 }
+
+html,
 body {
-    background-color:antiquewhite
+    min-height: 100%;
+    margin: 0;
 }
+
+body {
+    background-color: antiquewhite;
+}
+
 .container {
-    height:100%;
-    width:auto;
-    background-color:#183B36
+    min-height: 100px;
+    background-color: #183b36;
+}
+
+.logo {
+    display: block;
+    width: auto;
+    height: 100px;
+    margin: 0 auto;
+}
+
+.main-content {
+    position: relative;
+    min-height: calc(100vh - 100px);
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
 }
 
 .party {
     position: absolute;
     top: 50%;
     left: 50%;
+    width: min(20vh, 30vw);
+    height: auto;
     transform: translate(-50%, -50%);
-    height: 20%;
+    transform-origin: center;
+    pointer-events: none;
+    -webkit-user-drag: none;
 }
