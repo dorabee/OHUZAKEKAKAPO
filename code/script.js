@@ -13,13 +13,14 @@ let rotation = 0;
 let angularVelocity = 0;
 let isDragging = false;
 let previousAngle = null;
+let previousTime = 0;
 let lastFrameTime = 0;
 let currentFrame = 0;
 
-const acceleration = 0.6;
 const frictionPerFrame = 0.985;
-const maxAngularVelocity = 24;
+const maxAngularVelocity = 30;
 const stopThreshold = 0.015;
+const pointerSpeedForMax = 24;
 
 function getPointerAngle(event) {
     const bounds = kakapo.getBoundingClientRect();
@@ -33,6 +34,7 @@ function onPointerDown(event) {
 
     isDragging = true;
     previousAngle = getPointerAngle(event);
+    previousTime = event.timeStamp;
     stage.setPointerCapture(event.pointerId);
     event.preventDefault();
 }
@@ -46,10 +48,19 @@ function onPointerMove(event) {
     if (angleDelta > Math.PI) angleDelta -= Math.PI * 2;
     if (angleDelta < -Math.PI) angleDelta += Math.PI * 2;
 
-    angularVelocity -= angleDelta * acceleration;
-    angularVelocity = Math.max(-maxAngularVelocity, Math.min(maxAngularVelocity, angularVelocity));
+    const elapsed = Math.max((event.timeStamp - previousTime) / 1000, 1 / 240);
+    const pointerSpeed = Math.abs(angleDelta) / elapsed;
+
+    if (pointerSpeed > 0) {
+        const speedRatio = Math.min(pointerSpeed / pointerSpeedForMax, 1);
+        const targetSpeed = maxAngularVelocity * speedRatio;
+        const targetVelocity = -Math.sign(angleDelta) * targetSpeed;
+        const response = 1 - Math.exp(-Math.min(0.5 + pointerSpeed * 0.08, 2.5) * elapsed);
+        angularVelocity += (targetVelocity - angularVelocity) * response;
+    }
 
     previousAngle = currentAngle;
+    previousTime = event.timeStamp;
 }
 
 function stopDragging(event) {
