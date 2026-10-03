@@ -16,9 +16,9 @@ let previousAngle = null;
 let lastFrameTime = 0;
 let currentFrame = 0;
 
-const acceleration = 4;
+const acceleration = 0.6;
 const frictionPerFrame = 0.985;
-const maxAngularVelocity = 12;
+const maxAngularVelocity = 24;
 const stopThreshold = 0.015;
 
 function getPointerAngle(event) {
@@ -46,7 +46,7 @@ function onPointerMove(event) {
     if (angleDelta > Math.PI) angleDelta -= Math.PI * 2;
     if (angleDelta < -Math.PI) angleDelta += Math.PI * 2;
 
-    angularVelocity += angleDelta * acceleration;
+    angularVelocity -= angleDelta * acceleration;
     angularVelocity = Math.max(-maxAngularVelocity, Math.min(maxAngularVelocity, angularVelocity));
 
     previousAngle = currentAngle;
