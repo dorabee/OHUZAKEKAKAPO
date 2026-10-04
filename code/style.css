@@ -12,21 +12,9 @@ body {
     background-color: antiquewhite;
 }
 
-.container {
-    min-height: 100px;
-    background-color: #183b36;
-}
-
-.logo {
-    display: block;
-    width: auto;
-    height: 100px;
-    margin: 0 auto;
-}
-
 .main-content {
     position: relative;
-    min-height: calc(100vh - 100px);
+    min-height: 100vh;
     overflow: hidden;
     touch-action: none;
     user-select: none;
@@ -42,4 +30,68 @@ body {
     transform-origin: center;
     pointer-events: none;
     -webkit-user-drag: none;
+}
+
+.speed-meter {
+    position: absolute;
+    bottom: clamp(24px, 7vh, 56px);
+    left: 50%;
+    width: min(340px, calc(100vw - 40px));
+    padding: 14px 18px 12px;
+    transform: translateX(-50%);
+    border: 2px solid #183b36;
+    border-radius: 16px;
+    background-color: rgba(255, 255, 255, 0.82);
+    color: #183b36;
+    box-shadow: 0 5px 0 rgba(24, 59, 54, 0.16);
+    pointer-events: none;
+}
+
+.speed-meter-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 9px;
+    font-variant-numeric: tabular-nums;
+}
+
+.speed-meter-title {
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+}
+
+#speed-value {
+    font-size: 1.2rem;
+    font-weight: 800;
+}
+
+.speed-meter-track {
+    height: 12px;
+    overflow: hidden;
+    border: 2px solid #183b36;
+    border-radius: 999px;
+    background: repeating-linear-gradient(
+        to right,
+        #d8e2dc 0,
+        #d8e2dc calc(10% - 2px),
+        #183b36 calc(10% - 2px),
+        #183b36 10%
+    );
+}
+
+.speed-meter-fill {
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #67d6a2, #ffd34f 60%, #fa668b);
+    transition: width 80ms linear;
+}
+
+.spin-direction {
+    display: block;
+    margin-top: 7px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-align: right;
 }

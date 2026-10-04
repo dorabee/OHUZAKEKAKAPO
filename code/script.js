@@ -1,5 +1,9 @@
 const stage = document.querySelector(".main-content");
 const kakapo = document.getElementById("kakapo");
+const speedMeter = document.querySelector(".speed-meter");
+const speedFill = document.getElementById("speed-fill");
+const speedValue = document.getElementById("speed-value");
+const spinDirection = document.getElementById("spin-direction");
 const frames = Array.from({ length: 10 }, (_, index) => `../img/${index + 1}.png`);
 const radiansPerFrame = (Math.PI * 2) / frames.length;
 
@@ -16,11 +20,17 @@ let previousAngle = null;
 let previousTime = 0;
 let lastFrameTime = 0;
 let currentFrame = 0;
+let boostDirection = 0;
+let pendingDirection = 0;
+let pendingReverseTime = 0;
+let pendingReverseAngle = 0;
 
-const frictionPerFrame = 0.985;
-const maxAngularVelocity = 30;
+const frictionPerFrame = 0.995;
+const maxAngularVelocity = 50;
 const stopThreshold = 0.015;
-const pointerSpeedForMax = 24;
+const pointerSpeedForMax = 5;
+const reverseConfirmTime = 0.18;
+const reverseConfirmAngle = 0.15;
 
 function getPointerAngle(event) {
     const bounds = kakapo.getBoundingClientRect();
@@ -52,11 +62,50 @@ function onPointerMove(event) {
     const pointerSpeed = Math.abs(angleDelta) / elapsed;
 
     if (pointerSpeed > 0) {
-        const speedRatio = Math.min(pointerSpeed / pointerSpeedForMax, 1);
-        const targetSpeed = maxAngularVelocity * speedRatio;
-        const targetVelocity = -Math.sign(angleDelta) * targetSpeed;
-        const response = 1 - Math.exp(-Math.min(0.5 + pointerSpeed * 0.08, 2.5) * elapsed);
-        angularVelocity += (targetVelocity - angularVelocity) * response;
+        const inputRatio = Math.min(pointerSpeed / pointerSpeedForMax, 1);
+        let direction = -Math.sign(angleDelta);
+        let acceptInput = true;
+
+        if (boostDirection === 0) {
+            boostDirection = direction;
+        } else if (direction !== boostDirection) {
+            if (pendingDirection !== direction) {
+                pendingDirection = direction;
+                pendingReverseTime = 0;
+                pendingReverseAngle = 0;
+            }
+
+            pendingReverseTime += elapsed;
+            pendingReverseAngle += Math.abs(angleDelta);
+            if (pendingReverseTime >= reverseConfirmTime && pendingReverseAngle >= reverseConfirmAngle) {
+                boostDirection = direction;
+                pendingDirection = 0;
+                pendingReverseTime = 0;
+                pendingReverseAngle = 0;
+            } else {
+                acceptInput = false;
+            }
+        } else {
+            pendingDirection = 0;
+            pendingReverseTime = 0;
+            pendingReverseAngle = 0;
+        }
+
+        if (acceptInput) {
+            direction = boostDirection;
+            const targetVelocity = direction * maxAngularVelocity * inputRatio;
+            const isSlowingDown = Math.abs(targetVelocity) < Math.abs(angularVelocity)
+                || targetVelocity * angularVelocity < 0;
+            const responseRate = isSlowingDown
+                ? 5
+                : Math.min(0.5 + pointerSpeed * 0.06, 2.5);
+            const response = 1 - Math.exp(-responseRate * elapsed);
+            angularVelocity += (targetVelocity - angularVelocity) * response;
+        }
+    } else {
+        pendingDirection = 0;
+        pendingReverseTime = 0;
+        pendingReverseAngle = 0;
     }
 
     previousAngle = currentAngle;
@@ -67,6 +116,10 @@ function stopDragging(event) {
     if (!isDragging) return;
     isDragging = false;
     previousAngle = null;
+    boostDirection = 0;
+    pendingDirection = 0;
+    pendingReverseTime = 0;
+    pendingReverseAngle = 0;
     if (stage.hasPointerCapture(event.pointerId)) {
         stage.releasePointerCapture(event.pointerId);
     }
@@ -87,6 +140,18 @@ function animate(time) {
         currentFrame = nextFrame;
         kakapo.src = frames[currentFrame];
     }
+
+    const speedRatio = Math.min(Math.abs(angularVelocity) / maxAngularVelocity, 1);
+    const speedPercent = Math.round(speedRatio * 100);
+    const direction = Math.abs(angularVelocity) < stopThreshold
+        ? "停止"
+        : angularVelocity < 0 ? "時計回り" : "反時計回り";
+
+    speedFill.style.width = `${speedPercent}%`;
+    speedValue.value = `${speedPercent}%`;
+    speedMeter.setAttribute("aria-valuenow", speedPercent);
+    speedMeter.setAttribute("aria-valuetext", `${direction}、${speedPercent}%`);
+    spinDirection.value = direction;
 
     requestAnimationFrame(animate);
 }

@@ -4,19 +4,23 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>cacapodance</title>
+    <link rel="icon" type="image/png" href="../img/logo-img.png">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <header>
-        <div class="container">
-            <div class="header-logo">
-                <img class="logo" src="../img/logo-img.png" alt="logo">
-            </div>
-        </div>
-    </header>
     <div class="main-content">
         <div class="container-main">
             <img id="kakapo" class="party" src="../img/1.png" alt="回転するパーティーパロット" draggable="false">
+        </div>
+        <div class="speed-meter" role="meter" aria-label="回転速度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="停止">
+            <div class="speed-meter-heading">
+                <span class="speed-meter-title">ROTATION SPEED</span>
+                <output id="speed-value">0%</output>
+            </div>
+            <div class="speed-meter-track" aria-hidden="true">
+                <div id="speed-fill" class="speed-meter-fill"></div>
+            </div>
+            <output id="spin-direction" class="spin-direction" aria-live="polite">停止</output>
         </div>
     </div>
     <script src="script.js"></script>
