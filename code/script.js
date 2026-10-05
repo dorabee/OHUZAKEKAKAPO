@@ -4,6 +4,9 @@ const speedMeter = document.querySelector(".speed-meter");
 const speedFill = document.getElementById("speed-fill");
 const speedValue = document.getElementById("speed-value");
 const spinDirection = document.getElementById("spin-direction");
+const partyGaugeElement = document.querySelector(".party-gauge");
+const partyGaugeFill = document.getElementById("party-gauge-fill");
+const partyGaugeValue = document.getElementById("party-gauge-value");
 const frames = Array.from({ length: 10 }, (_, index) => `../img/${index + 1}.png`);
 const radiansPerFrame = (Math.PI * 2) / frames.length;
 
@@ -24,6 +27,7 @@ let boostDirection = 0;
 let pendingDirection = 0;
 let pendingReverseTime = 0;
 let pendingReverseAngle = 0;
+let partyGauge = 0;
 
 const frictionPerFrame = 0.995;
 const maxAngularVelocity = 50;
@@ -31,6 +35,10 @@ const stopThreshold = 0.015;
 const pointerSpeedForMax = 5;
 const reverseConfirmTime = 0.18;
 const reverseConfirmAngle = 0.15;
+const partyGaugeThreshold = 0.9;
+const partyGaugeChargeMinRate = 1;
+const partyGaugeChargeMaxRate = 6;
+const partyGaugeDecayRate = 3;
 
 function getPointerAngle(event) {
     const bounds = kakapo.getBoundingClientRect();
@@ -125,6 +133,23 @@ function stopDragging(event) {
     }
 }
 
+function updatePartyGauge(speedRatio, elapsed) {
+    if (speedRatio >= partyGaugeThreshold) {
+        const chargeRatio = (speedRatio - partyGaugeThreshold) / (1 - partyGaugeThreshold);
+        const chargeRate = partyGaugeChargeMinRate
+            + (partyGaugeChargeMaxRate - partyGaugeChargeMinRate) * chargeRatio;
+        partyGauge = Math.min(100, partyGauge + chargeRate * elapsed);
+    } else {
+        partyGauge = Math.max(0, partyGauge - partyGaugeDecayRate * elapsed);
+    }
+
+    const displayedValue = Math.round(partyGauge);
+    partyGaugeFill.style.width = `${partyGauge}%`;
+    partyGaugeValue.value = `${displayedValue}%`;
+    partyGaugeElement.setAttribute("aria-valuenow", displayedValue);
+    partyGaugeElement.setAttribute("aria-valuetext", `${displayedValue}%`);
+}
+
 function animate(time) {
     const elapsed = lastFrameTime ? Math.min((time - lastFrameTime) / 1000, 0.05) : 0;
     lastFrameTime = time;
@@ -143,6 +168,7 @@ function animate(time) {
 
     const speedRatio = Math.min(Math.abs(angularVelocity) / maxAngularVelocity, 1);
     const speedPercent = Math.round(speedRatio * 100);
+    updatePartyGauge(speedRatio, elapsed);
     const direction = Math.abs(angularVelocity) < stopThreshold
         ? "停止"
         : angularVelocity < 0 ? "時計回り" : "反時計回り";

@@ -21,6 +21,15 @@
                 <div id="speed-fill" class="speed-meter-fill"></div>
             </div>
             <output id="spin-direction" class="spin-direction" aria-live="polite">停止</output>
+            <div class="party-gauge" role="meter" aria-label="Party gauge" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="0%">
+                <div class="party-gauge-heading">
+                    <span class="party-gauge-title">PARTY</span>
+                    <output id="party-gauge-value">0%</output>
+                </div>
+                <div class="party-gauge-track" aria-hidden="true">
+                    <div id="party-gauge-fill" class="party-gauge-fill"></div>
+                </div>
+            </div>
         </div>
     </div>
     <script src="script.js"></script>
