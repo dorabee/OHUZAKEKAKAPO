@@ -31,8 +31,8 @@ body {
     pointer-events: none;
     -webkit-user-drag: none;
     filter:
-        drop-shadow(0 0 var(--glow-core-blur, 0px) rgba(255, 76, 145, var(--glow-core-alpha, 0)))
-        drop-shadow(0 0 var(--glow-halo-blur, 0px) rgba(255, 164, 74, var(--glow-halo-alpha, 0)));
+        drop-shadow(0 0 var(--glow-core-blur, 0px) rgba(var(--glow-rgb, 255, 76, 145), var(--glow-core-alpha, 0)))
+        drop-shadow(0 0 var(--glow-halo-blur, 0px) rgba(var(--glow-rgb, 255, 76, 145), var(--glow-halo-alpha, 0)));
 }
 
 .speed-meter {
