@@ -36,8 +36,8 @@ const pointerSpeedForMax = 5;
 const reverseConfirmTime = 0.18;
 const reverseConfirmAngle = 0.15;
 const partyGaugeThreshold = 0.9;
-const partyGaugeChargeMinRate = 1;
-const partyGaugeChargeMaxRate = 6;
+const partyGaugeChargeMinRate = 1.3;
+const partyGaugeChargeMaxRate = 7.8;
 const partyGaugeDecayRate = 3;
 
 function getPointerAngle(event) {
@@ -148,6 +148,23 @@ function updatePartyGauge(speedRatio, elapsed) {
     partyGaugeValue.value = `${displayedValue}%`;
     partyGaugeElement.setAttribute("aria-valuenow", displayedValue);
     partyGaugeElement.setAttribute("aria-valuetext", `${displayedValue}%`);
+    updatePartyGlow();
+}
+
+function updatePartyGlow() {
+    if (partyGauge < 20) {
+        kakapo.style.setProperty("--glow-core-blur", "0px");
+        kakapo.style.setProperty("--glow-core-alpha", "0");
+        kakapo.style.setProperty("--glow-halo-blur", "0px");
+        kakapo.style.setProperty("--glow-halo-alpha", "0");
+        return;
+    }
+
+    const glowProgress = Math.min((partyGauge - 20) / 80, 1);
+    kakapo.style.setProperty("--glow-core-blur", `${(8 + glowProgress * 20) * 4}px`);
+    kakapo.style.setProperty("--glow-core-alpha", `${Math.min((0.5 + glowProgress * 0.35) * 4, 1)}`);
+    kakapo.style.setProperty("--glow-halo-blur", `${(18 + glowProgress * 34) * 4}px`);
+    kakapo.style.setProperty("--glow-halo-alpha", `${Math.min((0.25 + glowProgress * 0.25) * 4, 1)}`);
 }
 
 function animate(time) {
