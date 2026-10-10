@@ -7,6 +7,8 @@ const spinDirection = document.getElementById("spin-direction");
 const partyGaugeElement = document.querySelector(".party-gauge");
 const partyGaugeFill = document.getElementById("party-gauge-fill");
 const partyGaugeValue = document.getElementById("party-gauge-value");
+const resetPartyGaugeButton = document.getElementById("reset-party-gauge");
+const debugBoostButton = document.getElementById("debug-boost");
 const frames = Array.from({ length: 10 }, (_, index) => `../img/${index + 1}.png`);
 const radiansPerFrame = (Math.PI * 2) / frames.length;
 
@@ -18,6 +20,8 @@ const preloadedFrames = frames.map((source) => {
 
 let rotation = 0;
 let angularVelocity = 0;
+let debugBoostActive = false;
+let debugBoostDirection = 1;
 let isDragging = false;
 let previousAngle = null;
 let previousTime = 0;
@@ -149,6 +153,33 @@ function stopDragging(event) {
     }
 }
 
+function startDebugBoost(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    debugBoostActive = true;
+    debugBoostDirection = Math.sign(angularVelocity) || 1;
+    debugBoostButton.setAttribute("aria-pressed", "true");
+
+    if (event.pointerId !== undefined) {
+        debugBoostButton.setPointerCapture(event.pointerId);
+    }
+}
+
+function stopDebugBoost(event) {
+    event.stopPropagation();
+    debugBoostActive = false;
+    debugBoostButton.setAttribute("aria-pressed", "false");
+
+    if (event.pointerId !== undefined && debugBoostButton.hasPointerCapture(event.pointerId)) {
+        debugBoostButton.releasePointerCapture(event.pointerId);
+    }
+}
+
+function stopKeyboardDebugBoost(event) {
+    if (event.code !== "Space" && event.code !== "Enter") return;
+    stopDebugBoost(event);
+}
+
 function updatePartyGauge(speedRatio, elapsed, time) {
     if (speedRatio >= partyGaugeThreshold) {
         const chargeRatio = (speedRatio - partyGaugeThreshold) / (1 - partyGaugeThreshold);
@@ -167,6 +198,15 @@ function updatePartyGauge(speedRatio, elapsed, time) {
     updatePartyGlow(time);
 }
 
+function resetPartyGauge() {
+    partyGauge = 0;
+    partyGaugeFill.style.width = "0%";
+    partyGaugeValue.value = "0%";
+    partyGaugeElement.setAttribute("aria-valuenow", "0");
+    partyGaugeElement.setAttribute("aria-valuetext", "0%");
+    updatePartyGlow(performance.now());
+}
+
 function updatePartyGlow(time) {
     if (partyGauge < partyGlowStart) {
         glowActive = false;
@@ -175,6 +215,9 @@ function updatePartyGlow(time) {
         kakapo.style.setProperty("--glow-core-alpha", "0");
         kakapo.style.setProperty("--glow-halo-blur", "0px");
         kakapo.style.setProperty("--glow-halo-alpha", "0");
+        kakapo.style.setProperty("--glow-ambient-blur", "0px");
+        kakapo.style.setProperty("--glow-ambient-alpha", "0");
+        kakapo.style.setProperty("--glow-edge-alpha", "0");
         return;
     }
 
@@ -194,18 +237,24 @@ function updatePartyGlow(time) {
 
     kakapo.style.setProperty("--glow-rgb", glowColor.join(", "));
     const glowProgress = Math.min((partyGauge - partyGlowStart) / (partyGlowMax - partyGlowStart), 1);
-    kakapo.style.setProperty("--glow-core-blur", `${4 + glowProgress * 108}px`);
-    kakapo.style.setProperty("--glow-core-alpha", `${0.15 + glowProgress * 0.85}`);
-    kakapo.style.setProperty("--glow-halo-blur", `${10 + glowProgress * 198}px`);
-    kakapo.style.setProperty("--glow-halo-alpha", `${0.08 + glowProgress * 0.92}`);
+    kakapo.style.setProperty("--glow-edge-alpha", `${0.75 + glowProgress * 0.25}`);
+    kakapo.style.setProperty("--glow-core-blur", `${2 + glowProgress * 10}px`);
+    kakapo.style.setProperty("--glow-core-alpha", `${0.85 + glowProgress * 0.15}`);
+    kakapo.style.setProperty("--glow-halo-blur", `${22 + glowProgress * 58}px`);
+    kakapo.style.setProperty("--glow-halo-alpha", `${0.3 + glowProgress * 0.45}`);
+    kakapo.style.setProperty("--glow-ambient-blur", `${50 + glowProgress * 110}px`);
+    kakapo.style.setProperty("--glow-ambient-alpha", `${0.12 + glowProgress * 0.28}`);
 }
 
 function animate(time) {
     const elapsed = lastFrameTime ? Math.min((time - lastFrameTime) / 1000, 0.05) : 0;
     lastFrameTime = time;
 
-    rotation += angularVelocity * elapsed;
-    if (!isDragging) {
+    const currentAngularVelocity = debugBoostActive
+        ? debugBoostDirection * maxAngularVelocity
+        : angularVelocity;
+    rotation += currentAngularVelocity * elapsed;
+    if (!isDragging && !debugBoostActive) {
         angularVelocity *= Math.pow(frictionPerFrame, elapsed * 60);
         if (Math.abs(angularVelocity) < stopThreshold) angularVelocity = 0;
     }
@@ -216,12 +265,12 @@ function animate(time) {
         kakapo.src = frames[currentFrame];
     }
 
-    const speedRatio = Math.min(Math.abs(angularVelocity) / maxAngularVelocity, 1);
+    const speedRatio = Math.min(Math.abs(currentAngularVelocity) / maxAngularVelocity, 1);
     const speedPercent = Math.round(speedRatio * 100);
     updatePartyGauge(speedRatio, elapsed, time);
-    const direction = Math.abs(angularVelocity) < stopThreshold
+    const direction = Math.abs(currentAngularVelocity) < stopThreshold
         ? "停止"
-        : angularVelocity < 0 ? "時計回り" : "反時計回り";
+        : currentAngularVelocity < 0 ? "時計回り" : "反時計回り";
 
     speedFill.style.width = `${speedPercent}%`;
     speedValue.value = `${speedPercent}%`;
@@ -236,4 +285,18 @@ stage.addEventListener("pointerdown", onPointerDown);
 stage.addEventListener("pointermove", onPointerMove);
 stage.addEventListener("pointerup", stopDragging);
 stage.addEventListener("pointercancel", stopDragging);
+resetPartyGaugeButton.addEventListener("pointerdown", (event) => event.stopPropagation());
+resetPartyGaugeButton.addEventListener("click", resetPartyGauge);
+debugBoostButton.addEventListener("pointerdown", startDebugBoost);
+debugBoostButton.addEventListener("pointerup", stopDebugBoost);
+debugBoostButton.addEventListener("pointercancel", stopDebugBoost);
+debugBoostButton.addEventListener("lostpointercapture", stopDebugBoost);
+debugBoostButton.addEventListener("keydown", (event) => {
+    if (event.code === "Space" || event.code === "Enter") startDebugBoost(event);
+});
+debugBoostButton.addEventListener("keyup", stopKeyboardDebugBoost);
+debugBoostButton.addEventListener("blur", () => {
+    debugBoostActive = false;
+    debugBoostButton.setAttribute("aria-pressed", "false");
+});
 requestAnimationFrame(animate);

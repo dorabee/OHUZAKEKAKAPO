@@ -20,6 +20,47 @@ body {
     user-select: none;
 }
 
+.debug-boost {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    z-index: 2;
+    padding: 10px 14px;
+    border: 2px solid #183b36;
+    border-radius: 999px;
+    background: #fff;
+    color: #183b36;
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    touch-action: none;
+}
+
+.reset-party-gauge {
+    position: absolute;
+    top: 18px;
+    left: 18px;
+    z-index: 2;
+    padding: 10px 14px;
+    border: 2px solid #183b36;
+    border-radius: 999px;
+    background: #fff;
+    color: #183b36;
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+}
+
+.debug-boost[aria-pressed="true"] {
+    background: #fa668b;
+    color: #fff;
+    box-shadow: 0 0 18px rgba(250, 102, 139, 0.8);
+}
+
 .party {
     position: absolute;
     top: 50%;
@@ -31,8 +72,10 @@ body {
     pointer-events: none;
     -webkit-user-drag: none;
     filter:
+        drop-shadow(0 0 2px rgba(var(--glow-rgb, 255, 76, 145), var(--glow-edge-alpha, 0)))
         drop-shadow(0 0 var(--glow-core-blur, 0px) rgba(var(--glow-rgb, 255, 76, 145), var(--glow-core-alpha, 0)))
-        drop-shadow(0 0 var(--glow-halo-blur, 0px) rgba(var(--glow-rgb, 255, 76, 145), var(--glow-halo-alpha, 0)));
+        drop-shadow(0 0 var(--glow-halo-blur, 0px) rgba(var(--glow-rgb, 255, 76, 145), var(--glow-halo-alpha, 0)))
+        drop-shadow(0 0 var(--glow-ambient-blur, 0px) rgba(var(--glow-rgb, 255, 76, 145), var(--glow-ambient-alpha, 0)));
 }
 
 .speed-meter {
