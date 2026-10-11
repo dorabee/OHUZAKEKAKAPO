@@ -8,12 +8,18 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- 画面全体の操作領域。JavaScriptがポインター操作を受け取ります。 -->
     <div class="main-content">
         <div class="container-main">
+            <!-- JavaScriptが1.png〜10.pngを切り替えるパーティーパロット本体です。 -->
             <img id="kakapo" class="party" src="../img/1.png" alt="回転するパーティーパロット" draggable="false">
         </div>
+        <!-- ゲージ55%で表示するメッセージ領域。空の状態からJavaScriptが文面を設定します。 -->
+        <div id="party-popup" class="party-popup" role="status" aria-live="polite" aria-atomic="true"></div>
+        <!-- 下のボタンはゲーム操作の確認・リセット用です。 -->
         <button id="reset-party-gauge" class="reset-party-gauge" type="button">RESET PARTY</button>
         <button id="debug-boost" class="debug-boost" type="button" aria-pressed="false">HOLD FOR 100%</button>
+        <!-- 速度の割合と、速度を維持した時間で増減するパーティーゲージです。 -->
         <div class="speed-meter" role="meter" aria-label="回転速度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="停止">
             <div class="speed-meter-heading">
                 <span class="speed-meter-title">ROTATION SPEED</span>
