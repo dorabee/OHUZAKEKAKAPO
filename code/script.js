@@ -2,6 +2,8 @@
 const stage = document.querySelector(".main-content");
 const kakapo = document.getElementById("kakapo");
 const partyPopup = document.getElementById("party-popup");
+const partyConfettiLayer = document.getElementById("party-confetti-layer");
+const partyCrackers = document.querySelectorAll(".party-cracker");
 const speedMeter = document.querySelector(".speed-meter");
 const speedFill = document.getElementById("speed-fill");
 const speedValue = document.getElementById("speed-value");
@@ -11,6 +13,9 @@ const partyGaugeFill = document.getElementById("party-gauge-fill");
 const partyGaugeValue = document.getElementById("party-gauge-value");
 const resetPartyGaugeButton = document.getElementById("reset-party-gauge");
 const debugBoostButton = document.getElementById("debug-boost");
+const doublePartyGaugeButton = document.getElementById("double-party-gauge");
+const partyGaugeLockValue = document.getElementById("party-gauge-lock-value");
+const togglePartyGaugeLockButton = document.getElementById("toggle-party-gauge-lock");
 // GIFを直接再生せず、回転量に合わせて10枚の静止画を切り替えます。
 const frames = Array.from({ length: 10 }, (_, index) => `../img/${index + 1}.png`);
 const radiansPerFrame = (Math.PI * 2) / frames.length;
@@ -37,6 +42,15 @@ let pendingDirection = 0;
 let pendingReverseTime = 0;
 let pendingReverseAngle = 0;
 let partyGauge = 0;
+let partyGaugeDoubleEnabled = false;
+let partyGaugeLocked = false;
+let lockedPartyGaugeValue = 0;
+let partyConfettiRainTimer = null;
+let partyConfettiRainMode = "off";
+let partyCrackerArmed = true;
+let partyMaxCrackerArmed = true;
+let partyAudioContext = null;
+let partyCrackerNoiseBuffer = null;
 let partyPopupArmed = true;
 let partyPopupHideTimer = null;
 let partyPopupCleanupTimer = null;
@@ -49,6 +63,18 @@ const pointerSpeedForMax = 5;
 const reverseConfirmTime = 0.18;
 const reverseConfirmAngle = 0.15;
 const partyGaugeThreshold = 0.9;
+const partyConfettiThreshold = 70;
+const partyConfettiRearmThreshold = 60;
+const partyMaxCrackerRearmThreshold = 95;
+const partyConfettiRainThreshold = 55;
+const partyConfettiRainInterval = 240;
+const partyConfettiRainPerWave = 3;
+const partyConfettiRainMaxInterval = 150;
+const partyConfettiRainMaxPerWave = 6;
+// 70%の発射分が残っていても、満タン時の3連発が十分に出せる上限です。
+const partyConfettiMaxPieces = 380;
+const partyConfettiBurstPerSide = 46;
+const partyConfettiColors = ["#ff4d6d", "#ffb627", "#fff36b", "#52d273", "#42c9ed", "#536dfe", "#b84dff"];
 const partyGaugeChargeMinRate = 1.04;
 const partyGaugeChargeMaxRate = 6.24;
 const partyGaugeDecayRate = 3;
@@ -85,6 +111,7 @@ function getPointerAngle(event) {
 function onPointerDown(event) {
     if (event.button !== 0 && event.pointerType === "mouse") return;
 
+    unlockPartyAudio();
     isDragging = true;
     previousAngle = getPointerAngle(event);
     previousTime = event.timeStamp;
@@ -177,6 +204,7 @@ function stopDragging(event) {
 function startDebugBoost(event) {
     event.preventDefault();
     event.stopPropagation();
+    unlockPartyAudio();
     debugBoostActive = true;
     debugBoostDirection = Math.sign(angularVelocity) || 1;
     debugBoostButton.setAttribute("aria-pressed", "true");
@@ -204,10 +232,14 @@ function stopKeyboardDebugBoost(event) {
 
 // 回転速度と経過時間からゲージを加減算します。速度ではなく「維持時間」も反映します。
 function updatePartyGauge(speedRatio, elapsed, time) {
-    if (speedRatio >= partyGaugeThreshold) {
+    if (partyGaugeLocked) {
+        // 固定中は数値を保ちますが、下のUI・発光・背景・発動判定は通常どおり更新します。
+        partyGauge = lockedPartyGaugeValue;
+    } else if (speedRatio >= partyGaugeThreshold) {
         const chargeRatio = (speedRatio - partyGaugeThreshold) / (1 - partyGaugeThreshold);
-        const chargeRate = partyGaugeChargeMinRate
+        let chargeRate = partyGaugeChargeMinRate
             + (partyGaugeChargeMaxRate - partyGaugeChargeMinRate) * chargeRatio;
+        if (partyGaugeDoubleEnabled) chargeRate *= 2;
         partyGauge = Math.min(100, partyGauge + chargeRate * elapsed);
     } else {
         partyGauge = Math.max(0, partyGauge - partyGaugeDecayRate * elapsed);
@@ -218,7 +250,31 @@ function updatePartyGauge(speedRatio, elapsed, time) {
     partyGaugeValue.value = `${displayedValue}%`;
     partyGaugeElement.setAttribute("aria-valuenow", displayedValue);
     partyGaugeElement.setAttribute("aria-valuetext", `${displayedValue}%`);
+    // 65%からクラッカーを見せます。発射条件（70%）はそのままです。
+    partyCrackers.forEach((cracker) => {
+        cracker.classList.toggle("is-visible", partyGauge >= 65);
+    });
     updatePartyGlow(time);
+    updatePartyBackground();
+    updatePartyConfettiRain();
+
+    // 60%以下まで戻ると再装填し、70%へ達した瞬間に一度だけ両側から発射します。
+    if (!partyCrackerArmed && partyGauge <= partyConfettiRearmThreshold) {
+        partyCrackerArmed = true;
+    }
+    if (partyCrackerArmed && partyGauge >= partyConfettiThreshold) {
+        partyCrackerArmed = false;
+        firePartyCrackerVolley();
+    }
+
+    // 100%到達時は特別に3連発し、95%以下まで戻ると再び発動可能にします。
+    if (!partyMaxCrackerArmed && partyGauge <= partyMaxCrackerRearmThreshold) {
+        partyMaxCrackerArmed = true;
+    }
+    if (partyMaxCrackerArmed && partyGauge >= 100) {
+        partyMaxCrackerArmed = false;
+        firePartyCrackerTriple();
+    }
 
     // 55%で発動後、45%以下まで下がるまでは再発動を待ちます。
     if (!partyPopupArmed && partyGauge <= partyPopupRearm) {
@@ -228,6 +284,173 @@ function updatePartyGauge(speedRatio, elapsed, time) {
         partyPopupArmed = false;
         showPartyPopup("テンション上がってきた！！");
     }
+}
+
+// 発射ごとに左右のクラッカーを反動させ、左右それぞれから紙吹雪を一斉に放ちます。
+function firePartyCrackerVolley() {
+    playPartyCrackerSound();
+
+    partyCrackers.forEach((cracker) => {
+        cracker.classList.remove("is-firing");
+        void cracker.offsetWidth;
+        cracker.classList.add("is-firing");
+        cracker.addEventListener("animationend", () => cracker.classList.remove("is-firing"), { once: true });
+    });
+
+    for (const side of ["left", "right"]) {
+        const remainingSlots = partyConfettiMaxPieces - partyConfettiLayer.childElementCount;
+        const burstCount = Math.min(partyConfettiBurstPerSide, Math.max(remainingSlots, 0));
+        for (let index = 0; index < burstCount; index += 1) {
+            createPartyConfettiPiece(side);
+        }
+    }
+}
+
+// 満タン時に発射音・反動・紙吹雪を200ms間隔で3回続けて出します。
+function firePartyCrackerTriple() {
+    for (let shot = 0; shot < 3; shot += 1) {
+        setTimeout(firePartyCrackerVolley, shot * 200);
+    }
+}
+
+// 55%以上なら上端から定期的に降らせ、下回ったら新しい紙吹雪の生成だけ止めます。
+function updatePartyConfettiRain() {
+    const nextMode = partyGauge >= 100
+        ? "max"
+        : partyGauge >= partyConfettiRainThreshold ? "normal" : "off";
+    if (nextMode === partyConfettiRainMode) return;
+
+    if (partyConfettiRainTimer !== null) {
+        window.clearInterval(partyConfettiRainTimer);
+    }
+    partyConfettiRainTimer = null;
+    partyConfettiRainMode = nextMode;
+    if (nextMode === "off") return;
+
+    // 100%では間隔を短くし、1回あたりの紙片数も倍にして密度を上げます。
+    const interval = nextMode === "max" ? partyConfettiRainMaxInterval : partyConfettiRainInterval;
+    const piecesPerWave = nextMode === "max" ? partyConfettiRainMaxPerWave : partyConfettiRainPerWave;
+    partyConfettiRainTimer = window.setInterval(() => {
+        for (let index = 0; index < piecesPerWave; index += 1) {
+            createPartyConfettiRainPiece();
+        }
+    }, interval);
+}
+
+// 画面上端から落ちる小さな紙片を生成します。通常の紙吹雪と同じ上限を共有します。
+function createPartyConfettiRainPiece() {
+    if (partyConfettiLayer.childElementCount >= partyConfettiMaxPieces) return;
+
+    const piece = document.createElement("span");
+    const drift = (Math.random() - 0.5) * Math.min(window.innerWidth * 0.2, 220);
+    const spin = (Math.random() < 0.5 ? -1 : 1) * (360 + Math.random() * 900);
+
+    piece.className = "party-confetti-piece party-confetti-rain-piece";
+    piece.style.left = `${Math.random() * window.innerWidth}px`;
+    piece.style.top = `${-20 - Math.random() * 70}px`;
+    piece.style.width = `${5 + Math.random() * 7}px`;
+    piece.style.height = `${7 + Math.random() * 10}px`;
+    piece.style.backgroundColor = partyConfettiColors[Math.floor(Math.random() * partyConfettiColors.length)];
+    piece.style.setProperty("--rain-mid-x", `${drift * 0.45}px`);
+    piece.style.setProperty("--rain-drift-x", `${drift}px`);
+    piece.style.setProperty("--rain-mid-spin", `${spin * 0.5}deg`);
+    piece.style.setProperty("--rain-spin", `${spin}deg`);
+    piece.style.animationDuration = `${3.5 + Math.random() * 2}s`;
+    piece.addEventListener("animationend", () => piece.remove(), { once: true });
+    partyConfettiLayer.append(piece);
+}
+
+// 発射口付近から勢いよく飛び出し、その後に落下する紙片を一つ作ります。
+function createPartyConfettiPiece(side) {
+    const piece = document.createElement("span");
+    const isLeft = side === "left";
+    // 紙吹雪をクラッカー本体の内向きの端から出し、発射口と動きをつなげます。
+    const cracker = Array.from(partyCrackers).find((item) => item.classList.contains(`party-cracker-${side}`));
+    const crackerBounds = cracker?.getBoundingClientRect();
+    const launchX = crackerBounds
+        ? (isLeft ? crackerBounds.right - 3 : crackerBounds.left + 3)
+        : (isLeft ? 80 : window.innerWidth - 80);
+    const launchY = crackerBounds
+        ? crackerBounds.top + crackerBounds.height * 0.3
+        : window.innerHeight - 60;
+    const burstX = (window.innerWidth * (0.28 + Math.random() * 0.22)) * (isLeft ? 1 : -1);
+    // 発射直後の上昇距離を増やし、紙吹雪がより高く舞い上がるようにします。
+    const burstY = -window.innerHeight * (0.48 + Math.random() * 0.32);
+    const spin = (Math.random() < 0.5 ? -1 : 1) * (360 + Math.random() * 1080);
+    const fallX = burstX + (Math.random() - 0.5) * window.innerWidth * 0.35;
+    const fallY = window.innerHeight * (0.55 + Math.random() * 0.5);
+
+    piece.className = "party-confetti-piece";
+    piece.style.left = `${launchX + (Math.random() - 0.5) * 20}px`;
+    piece.style.top = `${launchY + (Math.random() - 0.5) * 18}px`;
+    piece.style.width = `${6 + Math.random() * 8}px`;
+    piece.style.height = `${8 + Math.random() * 12}px`;
+    piece.style.backgroundColor = partyConfettiColors[Math.floor(Math.random() * partyConfettiColors.length)];
+    piece.style.setProperty("--confetti-mid-x", `${burstX * 0.55}px`);
+    piece.style.setProperty("--confetti-mid-y", `${burstY * 0.55}px`);
+    piece.style.setProperty("--confetti-arc-x", `${burstX * 1.12}px`);
+    piece.style.setProperty("--confetti-arc-y", `${burstY * 0.72}px`);
+    piece.style.setProperty("--confetti-fall-x", `${fallX}px`);
+    piece.style.setProperty("--confetti-fall-y", `${fallY}px`);
+    piece.style.setProperty("--confetti-mid-spin", `${spin * 0.35}deg`);
+    piece.style.setProperty("--confetti-arc-spin", `${spin * 0.7}deg`);
+    piece.style.setProperty("--confetti-spin", `${spin}deg`);
+    piece.style.animationDuration = `${2.7 + Math.random() * 1.8}s`;
+    piece.style.animationDelay = `${Math.random() * 0.12}s`;
+    piece.addEventListener("animationend", () => piece.remove(), { once: true });
+    partyConfettiLayer.append(piece);
+}
+
+// ユーザー操作中にAudioContextを準備し、後からの自動再生制限に備えます。
+function unlockPartyAudio() {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    if (!partyAudioContext) {
+        partyAudioContext = new AudioContextClass();
+        const noiseLength = Math.floor(partyAudioContext.sampleRate * 0.2);
+        partyCrackerNoiseBuffer = partyAudioContext.createBuffer(1, noiseLength, partyAudioContext.sampleRate);
+        const noiseSamples = partyCrackerNoiseBuffer.getChannelData(0);
+        for (let index = 0; index < noiseSamples.length; index += 1) {
+            noiseSamples[index] = Math.random() * 2 - 1;
+        }
+    }
+
+    if (partyAudioContext.state === "suspended") {
+        partyAudioContext.resume().catch(() => {});
+    }
+}
+
+// 録音ファイルは使わず、短いノイズと低音を重ねて「パンッ」という音を合成します。
+function playPartyCrackerSound() {
+    if (!partyAudioContext || partyAudioContext.state !== "running" || !partyCrackerNoiseBuffer) return;
+
+    const now = partyAudioContext.currentTime;
+    const noise = partyAudioContext.createBufferSource();
+    const filter = partyAudioContext.createBiquadFilter();
+    const noiseGain = partyAudioContext.createGain();
+    noise.buffer = partyCrackerNoiseBuffer;
+    filter.type = "highpass";
+    filter.frequency.setValueAtTime(500, now);
+    noiseGain.gain.setValueAtTime(0.42, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(partyAudioContext.destination);
+    noise.start(now);
+    noise.stop(now + 0.2);
+
+    const thump = partyAudioContext.createOscillator();
+    const thumpGain = partyAudioContext.createGain();
+    thump.type = "sine";
+    thump.frequency.setValueAtTime(115, now);
+    thump.frequency.exponentialRampToValueAtTime(48, now + 0.12);
+    thumpGain.gain.setValueAtTime(0.22, now);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+    thump.connect(thumpGain);
+    thumpGain.connect(partyAudioContext.destination);
+    thump.start(now);
+    thump.stop(now + 0.14);
 }
 
 // 汎用ポップアップ処理。文面と表示時間を変えるだけで他のメッセージにも使えます。
@@ -251,11 +474,39 @@ function showPartyPopup(message, duration = partyPopupDuration) {
 // リセットボタンから呼び出し、ゲージと発光・再発動の状態をまとめて初期化します。
 function resetPartyGauge() {
     partyGauge = 0;
+    partyGaugeLocked = false;
+    togglePartyGaugeLockButton.textContent = "固定";
+    togglePartyGaugeLockButton.setAttribute("aria-pressed", "false");
     partyGaugeFill.style.width = "0%";
     partyGaugeValue.value = "0%";
     partyGaugeElement.setAttribute("aria-valuenow", "0");
     partyGaugeElement.setAttribute("aria-valuetext", "0%");
     updatePartyGlow(performance.now());
+    updatePartyBackground();
+}
+
+// 指定した値で固定するか、固定を解除します。値は0〜100の範囲に収めます。
+function togglePartyGaugeLock() {
+    if (partyGaugeLocked) {
+        partyGaugeLocked = false;
+        togglePartyGaugeLockButton.textContent = "固定";
+        togglePartyGaugeLockButton.setAttribute("aria-pressed", "false");
+        return;
+    }
+
+    const requestedValue = Number(partyGaugeLockValue.value);
+    lockedPartyGaugeValue = Math.min(100, Math.max(0, Number.isFinite(requestedValue) ? requestedValue : 0));
+    partyGaugeLockValue.value = String(lockedPartyGaugeValue);
+    partyGauge = lockedPartyGaugeValue;
+    partyGaugeLocked = true;
+    togglePartyGaugeLockButton.textContent = "固定中";
+    togglePartyGaugeLockButton.setAttribute("aria-pressed", "true");
+}
+
+// 上昇率2倍は切替式で、オフにすると元の上昇率に戻ります。
+function togglePartyGaugeDouble() {
+    partyGaugeDoubleEnabled = !partyGaugeDoubleEnabled;
+    doublePartyGaugeButton.setAttribute("aria-pressed", String(partyGaugeDoubleEnabled));
 }
 
 // partyGaugeから光の強さを計算し、満タン時は色を一定間隔で巡回させます。
@@ -343,6 +594,9 @@ stage.addEventListener("pointerup", stopDragging);
 stage.addEventListener("pointercancel", stopDragging);
 resetPartyGaugeButton.addEventListener("pointerdown", (event) => event.stopPropagation());
 resetPartyGaugeButton.addEventListener("click", resetPartyGauge);
+document.querySelector(".party-debug-panel").addEventListener("pointerdown", (event) => event.stopPropagation());
+doublePartyGaugeButton.addEventListener("click", togglePartyGaugeDouble);
+togglePartyGaugeLockButton.addEventListener("click", togglePartyGaugeLock);
 debugBoostButton.addEventListener("pointerdown", startDebugBoost);
 debugBoostButton.addEventListener("pointerup", stopDebugBoost);
 debugBoostButton.addEventListener("pointercancel", stopDebugBoost);
@@ -356,24 +610,28 @@ debugBoostButton.addEventListener("blur", () => {
     debugBoostButton.setAttribute("aria-pressed", "false");
 });
 requestAnimationFrame(animate);
-// partyGaugeを背景色に変換します。ゲージ計算には触れず、表示だけを更新します。
+// ゲージ値を演出の状態に変換します。状態が帯をまたいだ時だけCSSクラスを変更します。
+let partyBackgroundState = "normal";
 function updatePartyBackground() {
-  const progress = Math.max(0, Math.min(100, partyGauge));
-  const root = document.documentElement;
+    let nextState = "normal";
 
-  // 0〜19%はantiquewhite、20〜79%はその色からパーティーピンクへ補間します。
-  const pastelAmount = Math.max(0, Math.min(1, (progress - 20) / 59));
-  const start = [250, 235, 215];
-  const finish = [255, 115, 155];
-  const rgb = start.map((channel, index) =>
-    Math.round(channel + (finish[index] - channel) * pastelAmount)
-  );
-  root.style.setProperty('--party-background-color', `rgb(${rgb.join(', ')})`);
+    if (partyGauge >= 98) {
+        nextState = "party-rainbow-flow-fast";
+    } else if (partyGauge >= 90) {
+        nextState = "party-rainbow-flow-medium";
+    } else if (partyGauge >= 85) {
+        nextState = "party-rainbow-flow-slow";
+    } else if (partyGauge >= 80) {
+        nextState = "party-rainbow-still";
+    } else if (partyGauge >= 55) {
+        nextState = "party-glow-strong";
+    } else if (partyGauge >= 20) {
+        nextState = "party-glow-soft";
+    }
 
-  // 80%から虹色レイヤーを徐々に濃くし、100%で最大の鮮やかさにします。
-  const rainbowOpacity = Math.max(0, Math.min(0.82, ((progress - 80) / 20) * 0.82));
-  root.style.setProperty('--party-rainbow-opacity', rainbowOpacity.toFixed(2));
+    // 毎フレーム判定しても、同じ状態ならDOMを更新しないため処理は軽量です。
+    if (nextState === partyBackgroundState) return;
+    document.body.classList.remove(partyBackgroundState);
+    if (nextState !== "normal") document.body.classList.add(nextState);
+    partyBackgroundState = nextState;
 }
-
-// ゲージの変化に追従させるため、一定間隔で背景用のCSS変数だけを書き換えます。
-window.setInterval(updatePartyBackground, 50);

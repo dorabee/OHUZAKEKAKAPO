@@ -16,6 +16,7 @@ body {
 .main-content {
     position: relative;
     min-height: 100vh;
+    z-index: 1;
     overflow: hidden;
     touch-action: none;
     user-select: none;
@@ -26,7 +27,7 @@ body {
     position: absolute;
     top: 18px;
     right: 18px;
-    z-index: 2;
+    z-index: 4;
     padding: 10px 14px;
     border: 2px solid #183b36;
     border-radius: 999px;
@@ -44,7 +45,7 @@ body {
     position: absolute;
     top: 18px;
     left: 18px;
-    z-index: 2;
+    z-index: 4;
     padding: 10px 14px;
     border: 2px solid #183b36;
     border-radius: 999px;
@@ -72,6 +73,7 @@ body {
     height: auto;
     transform: translate(-50%, -50%);
     transform-origin: center;
+    z-index: 3;
     pointer-events: none;
     -webkit-user-drag: none;
     filter:
@@ -79,6 +81,381 @@ body {
         drop-shadow(0 0 var(--glow-core-blur, 0px) rgba(var(--glow-rgb, 255, 76, 145), var(--glow-core-alpha, 0)))
         drop-shadow(0 0 var(--glow-halo-blur, 0px) rgba(var(--glow-rgb, 255, 76, 145), var(--glow-halo-alpha, 0)))
         drop-shadow(0 0 var(--glow-ambient-blur, 0px) rgba(var(--glow-rgb, 255, 76, 145), var(--glow-ambient-alpha, 0)));
+}
+
+/* 紙吹雪はカカポの後ろ、操作ボタンやメーターの手前に重ねます。 */
+.party-confetti-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+/* それぞれの紙片の色・位置・大きさ・回転量はJavaScriptが個別に設定します。 */
+.party-confetti-piece {
+    /* 紙片の移動を合成レイヤーで描画し、アニメーション中の再描画を抑えます。 */
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+    transform: translate3d(0, 0, 0);
+    position: absolute;
+    display: block;
+    border-radius: 2px;
+    opacity: 0;
+    box-shadow: 0 1px 3px rgba(24, 59, 54, 0.2);
+    animation: party-confetti-burst 4s cubic-bezier(0.12, 0.8, 0.18, 1) forwards;
+    will-change: transform, opacity;
+}
+
+/* 画面下端の左右にクラッカー本体を常時表示します。 */
+.party-cracker-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.party-debug-panel {
+    position: fixed;
+    z-index: 20;
+    top: 14px;
+    left: 14px;
+    display: grid;
+    gap: 7px;
+    width: min(250px, calc(100vw - 28px));
+    padding: 10px;
+    border: 1px solid rgba(77, 46, 99, 0.2);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.88);
+    box-shadow: 0 4px 16px rgba(56, 35, 75, 0.14);
+    color: #3c2b4d;
+    font: 600 13px/1.2 system-ui, sans-serif;
+    backdrop-filter: blur(8px);
+}
+
+.party-debug-button {
+    min-height: 32px;
+    padding: 6px 9px;
+    border: 1px solid #7953a5;
+    border-radius: 8px;
+    background: #fff;
+    color: #56357e;
+    font: inherit;
+    cursor: pointer;
+}
+
+.party-debug-button[aria-pressed="true"] {
+    background: #68439a;
+    color: #fff;
+}
+
+.party-gauge-lock-control {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.party-gauge-lock-control label {
+    margin-right: auto;
+}
+
+.party-gauge-lock-control input {
+    box-sizing: border-box;
+    width: 58px;
+    min-height: 32px;
+    padding: 4px 5px;
+    border: 1px solid #b7a7c7;
+    border-radius: 7px;
+    background: #fff;
+    color: #352442;
+    font: inherit;
+}
+
+.party-confetti-piece.party-confetti-rain-piece {
+    /* 通常の放射状紙吹雪とは別の、上から下へ落ちる軌道です。 */
+    animation-name: party-confetti-rain-fall;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+    will-change: transform, opacity;
+}
+
+@keyframes party-confetti-rain-fall {
+    0% {
+        opacity: 0;
+        transform: translate3d(0, -24px, 0) rotate(0deg);
+    }
+    10% {
+        opacity: 1;
+    }
+    50% {
+        transform: translate3d(var(--rain-mid-x), 50vh, 0) rotate(var(--rain-mid-spin));
+    }
+    90% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+        transform: translate3d(var(--rain-drift-x), calc(100vh + 40px), 0) rotate(var(--rain-spin));
+    }
+}
+
+.party-cracker {
+    position: absolute;
+    bottom: clamp(18px, 3vh, 36px);
+    width: clamp(60px, 7vw, 96px);
+    height: clamp(94px, 16vh, 165px);
+    background: repeating-linear-gradient(
+        135deg,
+        #ff3d83 0 14px,
+        #ffd34f 14px 28px,
+        #53d58c 28px 42px,
+        #6267ed 42px 56px
+    );
+    filter: drop-shadow(0 4px 3px rgba(24, 59, 54, 0.3));
+    transform-origin: 50% 92%;
+}
+
+/* 65%から見えるクラッカー本体。明暗のグラデーションと影で立体感を出します。 */
+.party-cracker {
+    /* 虹色の面にハイライトと陰影を重ね、厚みを表現します。 */
+    background-image:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0.12) 24%, transparent 46%, rgba(30, 12, 68, 0.34) 100%),
+        linear-gradient(90deg, transparent 14.5%, rgba(37, 12, 63, 0.98) 14.5% 16.2%, rgba(255, 255, 255, 0.82) 16.2% 16.8%, transparent 16.8% 30.5%, rgba(37, 12, 63, 0.98) 30.5% 32.2%, rgba(255, 255, 255, 0.82) 32.2% 32.8%, transparent 32.8% 46.5%, rgba(37, 12, 63, 0.98) 46.5% 48.2%, rgba(255, 255, 255, 0.82) 48.2% 48.8%, transparent 48.8% 62.5%, rgba(37, 12, 63, 0.98) 62.5% 64.2%, rgba(255, 255, 255, 0.82) 64.2% 64.8%, transparent 64.8% 78.5%, rgba(37, 12, 63, 0.98) 78.5% 80.2%, rgba(255, 255, 255, 0.82) 80.2% 80.8%, transparent 80.8%),
+        linear-gradient(90deg, #ff3158 0%, #ff8b24 16%, #ffe52e 32%, #45d85d 48%, #20c9e8 64%, #4f65ff 80%, #d34bff 100%);
+    filter: drop-shadow(0 0 2px rgba(31, 10, 54, 1))
+        drop-shadow(2px 3px 0 rgba(31, 10, 54, 0.9))
+        drop-shadow(0 0 8px rgba(142, 75, 255, 0.42));
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 240ms ease, visibility 240ms ease;
+}
+
+.party-cracker.is-visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* クラッカーは短い筒を基準に組み立て、画面下部から内側へ向けます。 */
+.party-cracker {
+    width: clamp(82px, 9vw, 124px);
+    height: clamp(72px, 8vw, 100px);
+    bottom: clamp(18px, 3vh, 30px);
+    background: none;
+    background-image: none;
+    filter: none;
+    clip-path: none;
+    transform: rotate(var(--cracker-angle));
+    transform-origin: 50% 50%;
+    overflow: visible;
+    opacity: 0;
+    visibility: hidden;
+}
+
+.party-cracker.is-visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+.party-cracker.party-cracker-left {
+    /* 長い底辺の中央側の端が右上に来るよう、内側へ傾けます。 */
+    --cracker-angle: -32deg;
+    left: clamp(20px, 3.5vw, 50px);
+    right: auto;
+    clip-path: none;
+}
+
+.party-cracker.party-cracker-right {
+    /* 左側の鏡写しにし、長い底辺を左上の中央へ向けます。 */
+    --cracker-angle: 32deg;
+    right: clamp(20px, 3.5vw, 50px);
+    left: auto;
+    clip-path: none;
+}
+
+.party-cracker-body {
+    position: absolute;
+    z-index: 2;
+    top: 5%;
+    left: 4%;
+    width: 92%;
+    height: 90%;
+    overflow: hidden;
+    background-image:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.12) 34%, transparent 55%, rgba(39, 13, 63, 0.28) 100%),
+        repeating-linear-gradient(135deg, #e3263d 0 11px, #ffdf35 11px 20px, #1769d2 20px 31px, #ffdf35 31px 39px);
+    clip-path: polygon(3% 5%, 3% 95%, 97% 50%);
+    filter: drop-shadow(0 0 1.5px #35134f) drop-shadow(2px 3px 0 rgba(45, 17, 65, 0.86));
+}
+
+/* 左は底辺を右（中央）へ、右は元の底辺を左（中央）へ向けます。 */
+.party-cracker-left .party-cracker-body {
+    clip-path: polygon(97% 5%, 97% 95%, 3% 50%);
+}
+
+.party-cracker-crease {
+    position: absolute;
+    top: 7%;
+    left: 59%;
+    width: 2px;
+    height: 86%;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(70, 28, 83, 0.78));
+    transform: rotate(29deg);
+    transform-origin: top center;
+}
+
+.party-cracker-crease::after {
+    position: absolute;
+    top: 25%;
+    left: -16px;
+    width: 32px;
+    height: 30px;
+    background: linear-gradient(135deg, rgba(255, 248, 194, 0.5), rgba(66, 24, 91, 0.38));
+    clip-path: polygon(0 0, 100% 50%, 0 100%);
+    content: "";
+}
+
+.party-cracker-twist {
+    position: absolute;
+    z-index: 1;
+    top: 25%;
+    width: 27%;
+    height: 50%;
+    border: 1px solid rgba(128, 73, 22, 0.8);
+    background: repeating-linear-gradient(135deg, #ffe58c 0 3px, #d68a27 3px 6px, #fff2bf 6px 8px);
+    clip-path: polygon(0 20%, 12% 0, 24% 22%, 38% 0, 50% 22%, 64% 0, 76% 22%, 90% 0, 100% 18%, 100% 82%, 90% 100%, 76% 78%, 64% 100%, 50% 78%, 38% 100%, 24% 78%, 12% 100%, 0 82%);
+    filter: drop-shadow(1px 2px 1px rgba(48, 26, 38, 0.6));
+}
+
+.party-cracker-twist-left {
+    left: 0;
+    transform: rotate(-5deg);
+}
+
+.party-cracker-twist-right {
+    right: 0;
+    transform: rotate(5deg);
+}
+
+.party-cracker-fuse {
+    position: absolute;
+    z-index: 3;
+    top: 37%;
+    right: 4%;
+    width: 13px;
+    height: 15px;
+    border-top: 2px solid #594126;
+    border-radius: 50%;
+    transform: rotate(-38deg);
+}
+
+.party-cracker-left .party-cracker-fuse {
+    right: auto;
+    left: 4%;
+    transform: rotate(38deg);
+}
+
+.party-cracker-right .party-cracker-fuse {
+    right: 4%;
+    left: auto;
+    transform: rotate(-38deg);
+}
+
+.party-cracker-spark {
+    position: absolute;
+    top: -6px;
+    right: -2px;
+    width: 9px;
+    height: 9px;
+    background: radial-gradient(circle, #fffbe0 0 17%, #fff36b 18% 40%, #ff7b18 42% 66%, transparent 70%);
+    filter: drop-shadow(0 0 5px #ffb21c);
+    animation: party-cracker-spark 700ms ease-in-out infinite alternate;
+}
+
+.party-cracker-right .party-cracker-spark {
+    right: auto;
+    left: -2px;
+}
+
+.party-cracker-left .party-cracker-spark {
+    right: auto;
+    left: -2px;
+}
+
+.party-cracker.party-cracker.is-firing {
+    animation: party-cracker-recoil 320ms ease-out;
+}
+
+.party-cracker.party-cracker.is-firing .party-cracker-body {
+    animation: party-cracker-pop 300ms ease-out;
+}
+
+@keyframes party-cracker-recoil {
+    0%, 100% { transform: rotate(var(--cracker-angle)) translate(0, 0); }
+    35% { transform: rotate(var(--cracker-angle)) translate(-4px, 3px); }
+}
+
+@keyframes party-cracker-pop {
+    0%, 100% { scale: 1; }
+    35% { scale: 1.08 0.9; }
+}
+
+@keyframes party-cracker-spark {
+    from { opacity: 0.58; scale: 0.8; }
+    to { opacity: 1; scale: 1.25; }
+}
+
+.party-cracker-left {
+    left: clamp(12px, 3vw, 44px);
+    /* 平らな辺を中央のパーティーパロット側へ向ける */
+    clip-path: polygon(58% 4%, 96% 34%, 8% 100%);
+}
+
+.party-cracker-right {
+    right: clamp(12px, 3vw, 44px);
+    /* 左側と鏡写しにして、平らな辺を中央へ向ける */
+    clip-path: polygon(42% 4%, 4% 34%, 92% 100%);
+}
+
+.party-cracker-mouth {
+    position: absolute;
+    top: 18%;
+    left: 57%;
+    width: 18%;
+    height: 12px;
+    border: 3px solid #fff2b3;
+    border-radius: 50%;
+    background: #ff7b42;
+    box-shadow: 0 0 8px rgba(255, 240, 165, 0.9);
+}
+
+.party-cracker-left .party-cracker-mouth {
+    top: 10%;
+    left: 56%;
+    transform: rotate(38deg);
+}
+
+.party-cracker-right .party-cracker-mouth {
+    top: 10%;
+    left: 23%;
+    transform: rotate(-38deg);
+}
+
+.party-cracker-right .party-cracker-mouth {
+    left: 25%;
+}
+
+/* クラッカー内の装飾用オレンジ丸は表示しない */
+.party-cracker-mouth {
+    display: none;
+}
+
+.party-cracker-left.is-firing {
+    animation: party-cracker-recoil-left 300ms ease-out;
+}
+
+.party-cracker-right.is-firing {
+    animation: party-cracker-recoil-right 300ms ease-out;
 }
 
 /* ポップアップは画像と同じステージ中央に置き、pointer-eventsで操作を妨げません。 */
@@ -89,7 +466,7 @@ body {
     position: absolute;
     top: 50%;
     left: 50%;
-    z-index: 3;
+    z-index: 5;
     width: max-content;
     max-width: calc(100vw - 32px);
     padding: 16px 28px;
@@ -140,6 +517,7 @@ body {
 /* 回転速度メーターとパーティーゲージをまとめたカードです。 */
 .speed-meter {
     position: absolute;
+    z-index: 4;
     bottom: clamp(24px, 7vh, 56px);
     left: 50%;
     width: min(340px, calc(100vw - 40px));
@@ -257,24 +635,150 @@ body {
         padding: 12px 16px;
     }
 }
-/* 通常時はantiquewhite。JavaScriptがゲージに応じて色と虹色レイヤーを調整します。 */
+/* bodyの地色はantiquewhiteのまま、疑似要素を重ねて背景演出を描きます。 */
 body {
-  background-color: var(--party-background-color, antiquewhite);
-  background-image: linear-gradient(
-    120deg,
-    rgba(255, 45, 80, var(--party-rainbow-opacity, 0)),
-    rgba(255, 190, 35, var(--party-rainbow-opacity, 0)),
-    rgba(80, 220, 100, var(--party-rainbow-opacity, 0)),
-    rgba(45, 190, 255, var(--party-rainbow-opacity, 0)),
-    rgba(170, 70, 255, var(--party-rainbow-opacity, 0)),
-    rgba(255, 65, 190, var(--party-rainbow-opacity, 0))
-  );
-  transition: background-color 450ms ease;
+    position: relative;
+    min-height: 100vh;
+    background-color: antiquewhite;
+    --party-glow-color: rgba(255, 190, 205, 0.42);
 }
 
-/* アニメーションを控えめにしたい設定の利用者には、背景色を即時変更します。 */
+/* color型のCSS変数を登録すると、ゲージ帯が変わる時に光色も補間できます。 */
+@property --party-glow-color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: rgba(255, 190, 205, 0.42);
+}
+
+/* 20〜79%で広がる単色の光。opacityだけを変えて自然に出入りさせます。 */
+body::before,
+body::after {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    content: "";
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 700ms ease, --party-glow-color 700ms ease;
+}
+
+body::before {
+    /* 中央だけを照らすのではなく、画面全体に色を重ねます。 */
+    background-color: var(--party-glow-color);
+}
+
+body.party-glow-soft::before {
+    --party-glow-color: rgba(255, 205, 220, 0.5);
+    opacity: 0.55;
+}
+
+/* 55%以上では同じ単色の彩度と光量を上げます。 */
+body.party-glow-strong::before {
+    --party-glow-color: rgba(255, 70, 145, 0.9);
+    opacity: 0.88;
+}
+
+/* 80%で虹色を表示し、85%までは流さず色の切り替わりをなじませます。 */
+body::after {
+    background: linear-gradient(
+        to right,
+        #ff4d6d 0%,
+        #ffb627 7.14%,
+        #fff36b 14.28%,
+        #52d273 21.42%,
+        #42c9ed 28.56%,
+        #536dfe 35.7%,
+        #b84dff 42.84%,
+        #ff4d6d 50%,
+        #ffb627 57.14%,
+        #fff36b 64.28%,
+        #52d273 71.42%,
+        #42c9ed 78.56%,
+        #536dfe 85.7%,
+        #b84dff 92.84%,
+        #ff4d6d 100%
+    );
+    /* 表示幅の2倍に同じ虹を2周期並べ、移動前後を同じ配色にします。 */
+    background-size: 200% 100%;
+}
+
+body.party-rainbow-still::after,
+body.party-rainbow-flow-slow::after,
+body.party-rainbow-flow-medium::after,
+body.party-rainbow-flow-fast::after {
+    opacity: 0.72;
+}
+
+/* 85%以上は同じ七色グラデーションを流し、ゲージ帯ごとに速度を上げます。 */
+body.party-rainbow-flow-slow::after {
+    animation: party-rainbow-flow 14s linear infinite;
+}
+
+body.party-rainbow-flow-medium::after {
+    animation: party-rainbow-flow 9s linear infinite;
+}
+
+body.party-rainbow-flow-fast::after {
+    animation: party-rainbow-flow 4.5s linear infinite;
+}
+
+/* 発射直後は勢いよく中央上へ飛び、その後は回りながら下へ落ちます。 */
+@keyframes party-confetti-burst {
+    0% {
+        opacity: 0;
+        transform: translate3d(0, 0, 0) rotate(0deg) scale(0.7);
+    }
+    8% { opacity: 0.96; }
+    20% {
+        opacity: 1;
+        transform: translate3d(var(--confetti-mid-x), var(--confetti-mid-y), 0)
+            rotate(var(--confetti-mid-spin)) scale(1.05);
+        animation-timing-function: ease-out;
+    }
+    45% {
+        opacity: 0.94;
+        transform: translate3d(var(--confetti-arc-x), var(--confetti-arc-y), 0)
+            rotate(var(--confetti-arc-spin));
+        animation-timing-function: ease-in;
+    }
+    100% {
+        opacity: 0;
+        transform: translate3d(var(--confetti-fall-x), var(--confetti-fall-y), 0)
+            rotate(var(--confetti-spin));
+    }
+}
+
+/* 発射時に一瞬だけ本体が後ろへ押され、反動で戻ります。 */
+@keyframes party-cracker-recoil-left {
+    0%, 100% { transform: translate(0, 0) rotate(0); }
+    32% { transform: translate(-7px, 8px) rotate(-5deg); }
+    68% { transform: translate(3px, -3px) rotate(2deg); }
+}
+
+@keyframes party-cracker-recoil-right {
+    0%, 100% { transform: translate(0, 0) rotate(0); }
+    32% { transform: translate(7px, 8px) rotate(5deg); }
+    68% { transform: translate(-3px, -3px) rotate(-2deg); }
+}
+
+/* 背景位置を動かすことで、帯状の色が画面を横切って流れて見えます。 */
+@keyframes party-rainbow-flow {
+    from { background-position: 0% 50%; }
+    to { background-position: 100% 50%; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  html body {
-    transition: none;
-  }
+    body::before,
+    body::after {
+        animation: none !important;
+        transition: none;
+    }
+
+    .party-confetti-piece {
+        animation-duration: 1ms;
+    }
+
+    .party-cracker.is-firing {
+        animation-duration: 1ms;
+    }
 }
