@@ -29,6 +29,25 @@
         </div>
         <!-- ゲージ55%で表示するメッセージ領域。空の状態からJavaScriptが文面を設定します。 -->
         <div id="party-popup" class="party-popup" role="status" aria-live="polite" aria-atomic="true"></div>
+        <!-- audio/default.mp3を既定曲にし、選択曲へ切り替えても同じ再生要素を使います。 -->
+        <audio id="party-music" src="../audio/default.mp3" preload="none"></audio>
+        <section class="party-music-panel" aria-label="音楽の操作">
+            <div class="party-music-heading">
+                <strong>PARTY MUSIC</strong>
+                <output id="party-music-file-name">default.mp3</output>
+            </div>
+            <div class="party-music-actions">
+                <label class="party-music-file-button" for="party-music-file">音楽ファイルを選択</label>
+                <input id="party-music-file" class="party-music-file-input" type="file" accept="audio/*">
+                <button id="party-music-play" class="party-music-play" type="button">再生を試す</button>
+            </div>
+            <label class="party-music-volume-control" for="party-music-volume">
+                <span>音量</span>
+                <input id="party-music-volume" type="range" min="0" max="100" value="50">
+                <output id="party-music-volume-value">50%</output>
+            </label>
+            <output id="party-music-status" class="party-music-status" role="status" aria-live="polite">PARTYゲージ70%以上で再生します。</output>
+        </section>
         <!-- 下のボタンはゲーム操作の確認・リセット用です。 -->
         <button id="reset-party-gauge" class="reset-party-gauge" type="button">RESET PARTY</button>
         <button id="debug-boost" class="debug-boost" type="button" aria-pressed="false">HOLD FOR 100%</button>

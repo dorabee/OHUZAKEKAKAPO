@@ -16,6 +16,13 @@ const debugBoostButton = document.getElementById("debug-boost");
 const doublePartyGaugeButton = document.getElementById("double-party-gauge");
 const partyGaugeLockValue = document.getElementById("party-gauge-lock-value");
 const togglePartyGaugeLockButton = document.getElementById("toggle-party-gauge-lock");
+const partyMusic = document.getElementById("party-music");
+const partyMusicFileInput = document.getElementById("party-music-file");
+const partyMusicFileName = document.getElementById("party-music-file-name");
+const partyMusicPlayButton = document.getElementById("party-music-play");
+const partyMusicVolume = document.getElementById("party-music-volume");
+const partyMusicVolumeValue = document.getElementById("party-music-volume-value");
+const partyMusicStatus = document.getElementById("party-music-status");
 // GIFを直接再生せず、回転量に合わせて10枚の静止画を切り替えます。
 const frames = Array.from({ length: 10 }, (_, index) => `../img/${index + 1}.png`);
 const radiansPerFrame = (Math.PI * 2) / frames.length;
@@ -47,6 +54,10 @@ let partyGaugeLocked = false;
 let lockedPartyGaugeValue = 0;
 let partyConfettiRainTimer = null;
 let partyConfettiRainMode = "off";
+let partyMusicGaugeState = null;
+let activePartyMusicObjectUrl = null;
+let pendingPartyMusicSwitch = null;
+let currentPartyMusicName = "default.mp3";
 let partyCrackerArmed = true;
 let partyMaxCrackerArmed = true;
 let partyAudioContext = null;
@@ -63,6 +74,7 @@ const pointerSpeedForMax = 5;
 const reverseConfirmTime = 0.18;
 const reverseConfirmAngle = 0.15;
 const partyGaugeThreshold = 0.9;
+const partyMusicThreshold = 70;
 const partyConfettiThreshold = 70;
 const partyConfettiRearmThreshold = 60;
 const partyMaxCrackerRearmThreshold = 95;
@@ -231,6 +243,151 @@ function stopKeyboardDebugBoost(event) {
 }
 
 // 回転速度と経過時間からゲージを加減算します。速度ではなく「維持時間」も反映します。
+function setPartyMusicStatus(message) {
+    partyMusicStatus.value = message;
+    partyMusicStatus.textContent = message;
+}
+
+function updatePartyMusicPlayButton() {
+    const isPlaying = !partyMusic.paused;
+    partyMusicPlayButton.textContent = isPlaying ? "再生中" : "再生を試す";
+    partyMusicPlayButton.disabled = isPlaying;
+    partyMusicPlayButton.setAttribute("aria-pressed", String(isPlaying));
+}
+
+// play()がブラウザに拒否された場合もcatchし、手動で再試行できる案内を出します。
+function requestPartyMusicPlayback() {
+    if (partyGauge < partyMusicThreshold) {
+        setPartyMusicStatus(`ゲージが${partyMusicThreshold}%未満のため一時停止中です。`);
+        return;
+    }
+    if (!partyMusic.paused) return;
+
+    const playRequest = partyMusic.play();
+    if (playRequest && typeof playRequest.then === "function") {
+        playRequest.then(() => {
+            setPartyMusicStatus(`再生中: ${currentPartyMusicName}`);
+        }).catch((error) => {
+            if (error.name === "NotAllowedError") {
+                setPartyMusicStatus("自動再生が制限されました。「再生を試す」を押してください。");
+            } else {
+                setPartyMusicStatus("音楽を再生できません。ファイル形式を確認してください。");
+            }
+        });
+    }
+}
+
+// ゲージの状態が70%境界を越えた時だけplay/pauseし、フレームごとの連続呼び出しを防ぎます。
+function syncPartyMusicWithGauge() {
+    const shouldPlay = partyGauge >= partyMusicThreshold;
+    if (shouldPlay === partyMusicGaugeState) return;
+    partyMusicGaugeState = shouldPlay;
+
+    if (shouldPlay) {
+        requestPartyMusicPlayback();
+    } else {
+        partyMusic.pause();
+        setPartyMusicStatus(`ゲージ${partyMusicThreshold}%未満のため一時停止中です。再び達すると続きから再生します。`);
+    }
+}
+
+function restorePartyMusic(previous) {
+    partyMusic.pause();
+    partyMusic.addEventListener("loadedmetadata", () => {
+        if (Number.isFinite(previous.currentTime) && previous.currentTime > 0) {
+            try {
+                partyMusic.currentTime = Math.min(previous.currentTime, partyMusic.duration || previous.currentTime);
+            } catch {
+                // 一部の形式ではシークできないため、曲頭からの再開に切り替えます。
+            }
+        }
+        if (previous.wasPlaying && partyGauge >= partyMusicThreshold) requestPartyMusicPlayback();
+    }, { once: true });
+    partyMusic.src = previous.source;
+    partyMusic.load();
+}
+
+// ファイル選択を連続で行った場合、未確定のObject URLを解放し、元の曲情報を引き継ぎます。
+function cancelPendingPartyMusicSwitch() {
+    if (!pendingPartyMusicSwitch) return null;
+    const pending = pendingPartyMusicSwitch;
+    partyMusic.removeEventListener("canplay", pending.onCanPlay);
+    partyMusic.removeEventListener("error", pending.onError);
+    URL.revokeObjectURL(pending.objectUrl);
+    pendingPartyMusicSwitch = null;
+    return pending.previous;
+}
+
+function handlePartyMusicFileSelection() {
+    const file = partyMusicFileInput.files?.[0];
+    if (!file) {
+        setPartyMusicStatus("選択はキャンセルされました。現在の曲を継続します。");
+        return;
+    }
+
+    const previous = cancelPendingPartyMusicSwitch() || {
+        source: partyMusic.currentSrc || partyMusic.src,
+        currentTime: Number.isFinite(partyMusic.currentTime) ? partyMusic.currentTime : 0,
+        wasPlaying: !partyMusic.paused,
+        objectUrl: activePartyMusicObjectUrl,
+        name: currentPartyMusicName
+    };
+    const objectUrl = URL.createObjectURL(file);
+    partyMusic.pause();
+    partyMusicFileName.textContent = file.name;
+    setPartyMusicStatus(`読み込み中: ${file.name}`);
+
+    const onCanPlay = () => {
+        partyMusic.removeEventListener("canplay", onCanPlay);
+        partyMusic.removeEventListener("error", onError);
+        pendingPartyMusicSwitch = null;
+        activePartyMusicObjectUrl = objectUrl;
+        currentPartyMusicName = file.name;
+        if (previous.objectUrl && previous.objectUrl !== objectUrl) {
+            URL.revokeObjectURL(previous.objectUrl);
+        }
+
+        if (partyGauge >= partyMusicThreshold) {
+            requestPartyMusicPlayback();
+        } else {
+            partyMusic.pause();
+            setPartyMusicStatus(`選択済み: ${file.name}（ゲージ${partyMusicThreshold}%以上で再生）`);
+        }
+    };
+
+    const onError = () => {
+        partyMusic.removeEventListener("canplay", onCanPlay);
+        partyMusic.removeEventListener("error", onError);
+        pendingPartyMusicSwitch = null;
+        URL.revokeObjectURL(objectUrl);
+        activePartyMusicObjectUrl = previous.objectUrl;
+        currentPartyMusicName = previous.name;
+        partyMusicFileName.textContent = previous.name;
+        restorePartyMusic(previous);
+        setPartyMusicStatus(`読み込みに失敗しました。現在の曲「${previous.name}」に戻しました。`);
+    };
+
+    pendingPartyMusicSwitch = { objectUrl, onCanPlay, onError, previous };
+    partyMusic.addEventListener("canplay", onCanPlay);
+    partyMusic.addEventListener("error", onError);
+    // 選択済みファイルをゲージ待ちの間にも読み込み、形式エラーを早めに検出します。
+    partyMusic.preload = "auto";
+    partyMusic.src = objectUrl;
+    partyMusic.load();
+
+    // ファイル選択はユーザー操作なので、ゲージが既に70%以上ならその場で再生を試します。
+    if (partyGauge >= partyMusicThreshold) requestPartyMusicPlayback();
+    partyMusicFileInput.value = "";
+}
+
+function retryPartyMusicFromButton() {
+    if (partyGauge < partyMusicThreshold) {
+        setPartyMusicStatus(`ゲージが${partyMusicThreshold}%未満では再生されません。`);
+        return;
+    }
+    requestPartyMusicPlayback();
+}
+
 function updatePartyGauge(speedRatio, elapsed, time) {
     if (partyGaugeLocked) {
         // 固定中は数値を保ちますが、下のUI・発光・背景・発動判定は通常どおり更新します。
@@ -257,6 +414,7 @@ function updatePartyGauge(speedRatio, elapsed, time) {
     updatePartyGlow(time);
     updatePartyBackground();
     updatePartyConfettiRain();
+    syncPartyMusicWithGauge();
 
     // 60%以下まで戻ると再装填し、70%へ達した瞬間に一度だけ両側から発射します。
     if (!partyCrackerArmed && partyGauge <= partyConfettiRearmThreshold) {
@@ -597,6 +755,57 @@ resetPartyGaugeButton.addEventListener("click", resetPartyGauge);
 document.querySelector(".party-debug-panel").addEventListener("pointerdown", (event) => event.stopPropagation());
 doublePartyGaugeButton.addEventListener("click", togglePartyGaugeDouble);
 togglePartyGaugeLockButton.addEventListener("click", togglePartyGaugeLock);
+// 音声ファイルの前後にある無音を避けるため、ended/timeupdateでループ位置を制御します。
+partyMusic.loop = false;
+partyMusic.volume = Number(partyMusicVolume.value) / 100;
+partyMusic.addEventListener("play", updatePartyMusicPlayButton);
+partyMusic.addEventListener("pause", updatePartyMusicPlayButton);
+const partyMusicTrimSeconds = 0.5;
+const partyMusicMinimumDuration = partyMusicTrimSeconds * 2 + 0.2;
+
+// 曲が十分長い場合だけ、冒頭を約0.5秒飛ばします。
+partyMusic.addEventListener("loadedmetadata", () => {
+    if (partyMusic.duration > partyMusicMinimumDuration && partyMusic.currentTime < partyMusicTrimSeconds) {
+        partyMusic.currentTime = partyMusicTrimSeconds;
+    }
+});
+
+// 終端の約0.5秒手前で冒頭の0.5秒地点へ戻し、無音区間を避けて再生します。
+partyMusic.addEventListener("timeupdate", () => {
+    if (partyMusic.duration > partyMusicMinimumDuration &&
+        partyMusic.currentTime >= partyMusic.duration - partyMusicTrimSeconds) {
+        partyMusic.currentTime = partyMusicTrimSeconds;
+    }
+});
+
+// 短い曲などでtimeupdateが終端に間に合わなかった場合のループ処理です。
+partyMusic.addEventListener("ended", () => {
+    const canTrim = partyMusic.duration > partyMusicMinimumDuration;
+    partyMusic.currentTime = canTrim ? partyMusicTrimSeconds : 0;
+    if (partyGauge >= partyMusicThreshold) {
+        requestPartyMusicPlayback();
+    }
+});
+partyMusic.addEventListener("error", () => {
+    if (!pendingPartyMusicSwitch) {
+        setPartyMusicStatus("音楽を読み込めません。ファイルの場所または形式を確認してください。");
+    }
+});
+partyMusicFileInput.addEventListener("change", handlePartyMusicFileSelection);
+partyMusicFileInput.addEventListener("cancel", () => {
+    setPartyMusicStatus("選択はキャンセルされました。現在の曲を継続します。");
+});
+partyMusicPlayButton.addEventListener("click", retryPartyMusicFromButton);
+partyMusicVolume.addEventListener("input", () => {
+    partyMusic.volume = Number(partyMusicVolume.value) / 100;
+    partyMusicVolumeValue.value = `${partyMusicVolume.value}%`;
+    partyMusicVolumeValue.textContent = `${partyMusicVolume.value}%`;
+});
+document.querySelector(".party-music-panel").addEventListener("pointerdown", (event) => event.stopPropagation());
+window.addEventListener("pagehide", () => {
+    if (pendingPartyMusicSwitch) URL.revokeObjectURL(pendingPartyMusicSwitch.objectUrl);
+    if (activePartyMusicObjectUrl) URL.revokeObjectURL(activePartyMusicObjectUrl);
+});
 debugBoostButton.addEventListener("pointerdown", startDebugBoost);
 debugBoostButton.addEventListener("pointerup", stopDebugBoost);
 debugBoostButton.addEventListener("pointercancel", stopDebugBoost);
