@@ -63,6 +63,70 @@ let partyMaxCrackerArmed = true;
 let partyAudioContext = null;
 let partyCrackerNoiseBuffer = null;
 let partyPopupArmed = true;
+
+// カーソル位置に白い光を追従させ、動いた道筋にも短命な粒を残します。
+let lastTrailPointerPosition = null;
+let activeCursorTrailParticles = 0;
+let cursorTrailFollower = null;
+const cursorTrailSpacing = 12;
+const cursorTrailParticleLimit = 32;
+const cursorTrailReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+document.addEventListener("pointermove", (event) => {
+    // タッチ操作では画面を覆う演出になりやすいため、マウスとペンだけを対象にします。
+    if (event.pointerType === "touch") {
+        lastTrailPointerPosition = null;
+        return;
+    }
+
+    const currentPosition = { x: event.clientX, y: event.clientY };
+    // この白い光はカーソルが止まっている間も残り、最後の座標に追従し続けます。
+    if (!cursorTrailFollower) {
+        cursorTrailFollower = document.createElement("span");
+        cursorTrailFollower.className = "party-cursor-trail-follower";
+        cursorTrailFollower.setAttribute("aria-hidden", "true");
+        document.body.append(cursorTrailFollower);
+    }
+    cursorTrailFollower.style.left = `${currentPosition.x}px`;
+    cursorTrailFollower.style.top = `${currentPosition.y}px`;
+
+    // 動きを減らす設定でも白いカーソル光は追従し、後ろの粒だけを停止します。
+    if (cursorTrailReducedMotion.matches) {
+        lastTrailPointerPosition = currentPosition;
+        return;
+    }
+
+    if (lastTrailPointerPosition) {
+        const dx = currentPosition.x - lastTrailPointerPosition.x;
+        const dy = currentPosition.y - lastTrailPointerPosition.y;
+        const distance = Math.hypot(dx, dy);
+
+        // 細かいイベントごとに粒を作らず、一定距離ごとに生成数を抑えます。
+        if (distance >= cursorTrailSpacing && activeCursorTrailParticles < cursorTrailParticleLimit) {
+            const particle = document.createElement("span");
+            particle.className = "party-cursor-trail-particle";
+            particle.setAttribute("aria-hidden", "true");
+            particle.style.left = `${currentPosition.x}px`;
+            particle.style.top = `${currentPosition.y}px`;
+            particle.style.setProperty("--trail-size", `${7 + Math.random() * 6}px`);
+            activeCursorTrailParticles += 1;
+            document.body.append(particle);
+
+            // アニメーションが終わった粒は削除し、DOM要素が増え続けないようにします。
+            let particleRemoved = false;
+            const removeTrailParticle = () => {
+                if (particleRemoved) return;
+                particleRemoved = true;
+                particle.remove();
+                activeCursorTrailParticles -= 1;
+            };
+            particle.addEventListener("animationend", removeTrailParticle, { once: true });
+            // 動作中にOSの「視差効果を減らす」設定へ切り替わっても確実に掃除します。
+            window.setTimeout(removeTrailParticle, 700);
+        }
+    }
+    lastTrailPointerPosition = currentPosition;
+});
 let partyPopupHideTimer = null;
 let partyPopupCleanupTimer = null;
 
