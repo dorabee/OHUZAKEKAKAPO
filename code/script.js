@@ -138,7 +138,10 @@ const pointerSpeedForMax = 5;
 const reverseConfirmTime = 0.18;
 const reverseConfirmAngle = 0.15;
 const partyGaugeThreshold = 0.9;
-const partyMusicThreshold = 70;
+// 50%から曲を小さく再生し始め、ゲージ上昇に合わせて音量を上げます。
+const partyMusicThreshold = 50;
+const partyMusicVolumeRampStart = 50;
+const partyMusicVolumeCeiling = 0.9;
 const partyConfettiThreshold = 70;
 const partyConfettiRearmThreshold = 60;
 const partyMaxCrackerRearmThreshold = 95;
@@ -312,6 +315,20 @@ function setPartyMusicStatus(message) {
     partyMusicStatus.textContent = message;
 }
 
+// ゲージ50〜100%を0〜90%の音量に変換します。音量スライダーは最大音量の上限です。
+function updatePartyMusicVolume() {
+    const progress = Math.min(1, Math.max(0,
+        (partyGauge - partyMusicVolumeRampStart) / (100 - partyMusicVolumeRampStart)));
+    // smoothstepで出だしと最大付近をなめらかにし、急な音量変化を抑えます。
+    const smoothProgress = progress * progress * (3 - 2 * progress);
+    const selectedMaximum = Math.min(Number(partyMusicVolume.value) / 100, partyMusicVolumeCeiling);
+    const nextVolume = selectedMaximum * smoothProgress;
+
+    if (Math.abs(partyMusic.volume - nextVolume) > 0.002) {
+        partyMusic.volume = nextVolume;
+    }
+}
+
 function updatePartyMusicPlayButton() {
     const isPlaying = !partyMusic.paused;
     partyMusicPlayButton.textContent = isPlaying ? "再生中" : "再生を試す";
@@ -341,7 +358,7 @@ function requestPartyMusicPlayback() {
     }
 }
 
-// ゲージの状態が70%境界を越えた時だけplay/pauseし、フレームごとの連続呼び出しを防ぎます。
+// ゲージの状態が50%境界を越えた時だけplay/pauseし、フレームごとの連続呼び出しを防ぎます。
 function syncPartyMusicWithGauge() {
     const shouldPlay = partyGauge >= partyMusicThreshold;
     if (shouldPlay === partyMusicGaugeState) return;
@@ -439,7 +456,7 @@ function handlePartyMusicFileSelection() {
     partyMusic.src = objectUrl;
     partyMusic.load();
 
-    // ファイル選択はユーザー操作なので、ゲージが既に70%以上ならその場で再生を試します。
+    // ファイル選択はユーザー操作なので、ゲージが既に50%以上ならその場で再生を試します。
     if (partyGauge >= partyMusicThreshold) requestPartyMusicPlayback();
     partyMusicFileInput.value = "";
 }
@@ -478,6 +495,7 @@ function updatePartyGauge(speedRatio, elapsed, time) {
     updatePartyGlow(time);
     updatePartyBackground();
     updatePartyConfettiRain();
+    updatePartyMusicVolume();
     syncPartyMusicWithGauge();
 
     // 60%以下まで戻ると再装填し、70%へ達した瞬間に一度だけ両側から発射します。
@@ -820,7 +838,7 @@ document.querySelector(".party-debug-panel").addEventListener("pointerdown", (ev
 doublePartyGaugeButton.addEventListener("click", togglePartyGaugeDouble);
 togglePartyGaugeLockButton.addEventListener("click", togglePartyGaugeLock);
 partyMusic.loop = true;
-partyMusic.volume = Number(partyMusicVolume.value) / 100;
+updatePartyMusicVolume();
 partyMusic.addEventListener("play", updatePartyMusicPlayButton);
 partyMusic.addEventListener("pause", updatePartyMusicPlayButton);
 partyMusic.addEventListener("error", () => {
@@ -834,7 +852,7 @@ partyMusicFileInput.addEventListener("cancel", () => {
 });
 partyMusicPlayButton.addEventListener("click", retryPartyMusicFromButton);
 partyMusicVolume.addEventListener("input", () => {
-    partyMusic.volume = Number(partyMusicVolume.value) / 100;
+    updatePartyMusicVolume();
     partyMusicVolumeValue.value = `${partyMusicVolume.value}%`;
     partyMusicVolumeValue.textContent = `${partyMusicVolume.value}%`;
 });
