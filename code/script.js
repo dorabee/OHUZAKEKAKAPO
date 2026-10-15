@@ -755,37 +755,10 @@ resetPartyGaugeButton.addEventListener("click", resetPartyGauge);
 document.querySelector(".party-debug-panel").addEventListener("pointerdown", (event) => event.stopPropagation());
 doublePartyGaugeButton.addEventListener("click", togglePartyGaugeDouble);
 togglePartyGaugeLockButton.addEventListener("click", togglePartyGaugeLock);
-// 音声ファイルの前後にある無音を避けるため、ended/timeupdateでループ位置を制御します。
-partyMusic.loop = false;
+partyMusic.loop = true;
 partyMusic.volume = Number(partyMusicVolume.value) / 100;
 partyMusic.addEventListener("play", updatePartyMusicPlayButton);
 partyMusic.addEventListener("pause", updatePartyMusicPlayButton);
-const partyMusicTrimSeconds = 0.5;
-const partyMusicMinimumDuration = partyMusicTrimSeconds * 2 + 0.2;
-
-// 曲が十分長い場合だけ、冒頭を約0.5秒飛ばします。
-partyMusic.addEventListener("loadedmetadata", () => {
-    if (partyMusic.duration > partyMusicMinimumDuration && partyMusic.currentTime < partyMusicTrimSeconds) {
-        partyMusic.currentTime = partyMusicTrimSeconds;
-    }
-});
-
-// 終端の約0.5秒手前で冒頭の0.5秒地点へ戻し、無音区間を避けて再生します。
-partyMusic.addEventListener("timeupdate", () => {
-    if (partyMusic.duration > partyMusicMinimumDuration &&
-        partyMusic.currentTime >= partyMusic.duration - partyMusicTrimSeconds) {
-        partyMusic.currentTime = partyMusicTrimSeconds;
-    }
-});
-
-// 短い曲などでtimeupdateが終端に間に合わなかった場合のループ処理です。
-partyMusic.addEventListener("ended", () => {
-    const canTrim = partyMusic.duration > partyMusicMinimumDuration;
-    partyMusic.currentTime = canTrim ? partyMusicTrimSeconds : 0;
-    if (partyGauge >= partyMusicThreshold) {
-        requestPartyMusicPlayback();
-    }
-});
 partyMusic.addEventListener("error", () => {
     if (!pendingPartyMusicSwitch) {
         setPartyMusicStatus("音楽を読み込めません。ファイルの場所または形式を確認してください。");
