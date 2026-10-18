@@ -3,6 +3,7 @@ const stage = document.querySelector(".main-content");
 const kakapo = document.getElementById("kakapo");
 const partyPopup = document.getElementById("party-popup");
 const partyConfettiLayer = document.getElementById("party-confetti-layer");
+const partyParrotPopLayer = document.getElementById("party-parrot-pop-layer");
 const partyCrackers = document.querySelectorAll(".party-cracker");
 const speedMeter = document.querySelector(".speed-meter");
 const speedFill = document.getElementById("speed-fill");
@@ -54,6 +55,8 @@ let partyGaugeLocked = false;
 let lockedPartyGaugeValue = 0;
 let partyConfettiRainTimer = null;
 let partyConfettiRainMode = "off";
+let partyParrotPopTimer = null;
+let partyParrotPopMode = "off";
 let partyMusicGaugeState = null;
 let activePartyMusicObjectUrl = null;
 let pendingPartyMusicSwitch = null;
@@ -146,6 +149,8 @@ const partyConfettiThreshold = 70;
 const partyConfettiRearmThreshold = 60;
 const partyMaxCrackerRearmThreshold = 95;
 const partyConfettiRainThreshold = 55;
+const partyParrotPopThreshold = 55;
+const partyParrotPopMaxCount = 24;
 const partyConfettiRainInterval = 240;
 const partyConfettiRainPerWave = 3;
 const partyConfettiRainMaxInterval = 150;
@@ -495,6 +500,7 @@ function updatePartyGauge(speedRatio, elapsed, time) {
     updatePartyGlow(time);
     updatePartyBackground();
     updatePartyConfettiRain();
+    updatePartyParrotPop();
     updatePartyMusicVolume();
     syncPartyMusicWithGauge();
 
@@ -551,6 +557,81 @@ function firePartyCrackerTriple() {
     for (let shot = 0; shot < 3; shot += 1) {
         setTimeout(firePartyCrackerVolley, shot * 200);
     }
+}
+
+// ゲージ帯が変わった時だけ出現タイマーを切り替えます。画面内の複製はそのまま飛び続けます。
+function updatePartyParrotPop() {
+    const nextMode = partyGauge >= 85
+        ? "max"
+        : partyGauge >= 70 ? "party" : partyGauge >= partyParrotPopThreshold ? "warmup" : "off";
+    if (nextMode === partyParrotPopMode) return;
+
+    if (partyParrotPopTimer !== null) {
+        window.clearTimeout(partyParrotPopTimer);
+        partyParrotPopTimer = null;
+    }
+    partyParrotPopMode = nextMode;
+    if (nextMode !== "off") schedulePartyParrotPop();
+}
+
+// タイマーは常に一つだけ保持し、出現間隔に少しランダム性を加えます。
+function schedulePartyParrotPop() {
+    const intervals = {
+        warmup: [1800, 2600],
+        party: [650, 950],
+        max: [250, 380],
+    };
+    const [minimumDelay, maximumDelay] = intervals[partyParrotPopMode];
+    const delay = minimumDelay + Math.random() * (maximumDelay - minimumDelay);
+
+    partyParrotPopTimer = window.setTimeout(() => {
+        partyParrotPopTimer = null;
+        if (partyGauge < partyParrotPopThreshold || partyParrotPopMode === "off") {
+            updatePartyParrotPop();
+            return;
+        }
+        createPartyParrotPop();
+        schedulePartyParrotPop();
+    }, delay);
+}
+
+// 既存のコマ画像から複製を作り、画面下から上へ飛ばします。メイン画像には触れません。
+function createPartyParrotPop() {
+    if (partyParrotPopLayer.childElementCount >= partyParrotPopMaxCount) return;
+
+    const parrot = document.createElement("img");
+    const isSmallScreen = window.innerWidth < 600;
+    const size = Math.min(isSmallScreen ? 64 : 92, 46 + Math.random() * 46);
+    const maxLeft = Math.max(0, window.innerWidth - size);
+    const horizontalDrift = (Math.random() - 0.5) * Math.min(window.innerWidth * 0.42, 360);
+    const rotationStart = (Math.random() - 0.5) * 50;
+    const rotationEnd = (Math.random() < 0.5 ? -1 : 1) * (180 + Math.random() * 720);
+    // 火山の噴き上がりを表す頂点の高さと、噴き上がった後に落ちる距離です。
+    const eruptionHeight = window.innerHeight * (0.8 + Math.random() * 0.4) + size;
+    const fallDistance = eruptionHeight + window.innerHeight * (0.16 + Math.random() * 0.12);
+    const duration = partyParrotPopMode === "max"
+        ? 3.4 + Math.random() * 1.4
+        : partyParrotPopMode === "party" ? 4 + Math.random() * 1.5 : 4.8 + Math.random() * 1.6;
+
+    parrot.className = "party-parrot-pop";
+    parrot.src = frames[Math.floor(Math.random() * frames.length)];
+    parrot.alt = "";
+    parrot.draggable = false;
+    parrot.style.width = `${size}px`;
+    parrot.style.left = `${Math.random() * maxLeft}px`;
+    parrot.style.bottom = `${-size * 0.9}px`;
+    parrot.style.setProperty("--parrot-burst-y", `${-window.innerHeight * 0.16}px`);
+    parrot.style.setProperty("--parrot-apex-y", `${-eruptionHeight}px`);
+    parrot.style.setProperty("--parrot-fall-y", `${fallDistance}px`);
+    parrot.style.setProperty("--parrot-drift-mid", `${horizontalDrift * 0.62}px`);
+    parrot.style.setProperty("--parrot-drift-end", `${horizontalDrift * 1.12}px`);
+    parrot.style.setProperty("--parrot-rotation-start", `${rotationStart}deg`);
+    parrot.style.setProperty("--parrot-rotation-end", `${rotationEnd}deg`);
+    parrot.style.setProperty("--parrot-rotation-fall", `${rotationEnd * 1.35}deg`);
+    parrot.style.animationDuration = `${duration}s`;
+    parrot.addEventListener("animationend", () => parrot.remove(), { once: true });
+    parrot.addEventListener("animationcancel", () => parrot.remove(), { once: true });
+    partyParrotPopLayer.append(parrot);
 }
 
 // 55%以上なら上端から定期的に降らせ、下回ったら新しい紙吹雪の生成だけ止めます。
