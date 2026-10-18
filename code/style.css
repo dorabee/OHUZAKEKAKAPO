@@ -107,6 +107,57 @@ body {
     will-change: transform, opacity;
 }
 
+/* 複製パロットは専用レイヤー内を飛び、クリックやメイン画像のドラッグを受け取りません。 */
+.party-parrot-pop-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.party-parrot-pop {
+    position: absolute;
+    display: block;
+    max-width: min(92px, 18vw);
+    height: auto;
+    pointer-events: none;
+    user-select: none;
+    opacity: 0;
+    filter:
+        drop-shadow(0 0 6px rgba(255, 112, 24, 0.68))
+        drop-shadow(0 0 14px rgba(255, 65, 0, 0.34))
+        drop-shadow(0 2px 5px rgba(24, 59, 54, 0.22));
+    transform-origin: center;
+    backface-visibility: hidden;
+    will-change: transform, opacity;
+    animation: party-parrot-fly-up 5s cubic-bezier(0.2, 0.72, 0.35, 1) forwards;
+}
+
+@keyframes party-parrot-fly-up {
+    0% {
+        opacity: 0;
+        transform: translate3d(0, 0, 0) rotate(var(--parrot-rotation-start)) scale(0.62);
+        animation-timing-function: cubic-bezier(0.12, 0.82, 0.22, 1);
+    }
+    7% {
+        opacity: 1;
+        transform: translate3d(0, var(--parrot-burst-y), 0)
+            rotate(var(--parrot-rotation-start)) scale(1.16);
+    }
+    42% {
+        opacity: 1;
+        transform: translate3d(var(--parrot-drift-mid), var(--parrot-apex-y), 0)
+            rotate(var(--parrot-rotation-end)) scale(1);
+        animation-timing-function: cubic-bezier(0.52, 0, 0.92, 0.54);
+    }
+    100% {
+        opacity: 0;
+        transform: translate3d(var(--parrot-drift-end), var(--parrot-fall-y), 0)
+            rotate(var(--parrot-rotation-fall)) scale(0.86);
+    }
+}
+
 /* 画面下端の左右にクラッカー本体を常時表示します。 */
 .party-cracker-layer {
     position: fixed;
@@ -881,9 +932,20 @@ body.party-rainbow-flow-fast::after {
         animation-duration: 1ms;
     }
 
+    .party-parrot-pop {
+        animation-name: party-parrot-fly-up-reduced;
+        animation-duration: 2.8s;
+    }
+
     .party-cracker.is-firing {
         animation-duration: 1ms;
     }
+}
+
+@keyframes party-parrot-fly-up-reduced {
+    0% { opacity: 0; transform: translateY(0) scale(0.9); }
+    12% { opacity: 1; }
+    100% { opacity: 0; transform: translateY(-60vh) scale(1); }
 }
 
 /* カーソルの軌跡に沿う発光粒。固定配置とpointer-events:noneで操作を妨げません。 */
